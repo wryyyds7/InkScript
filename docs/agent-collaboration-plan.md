@@ -1209,16 +1209,64 @@ Closes #1"
 
 ---
 
-## 🚀 下一步
+## 🚀 使用 Agent 编排脚本
+
+### 脚本位置
+`scripts/agent_orchestrator.py`
+
+### 使用方法
+
+#### 1. 列出所有阶段和任务
+```bash
+python scripts/agent_orchestrator.py --list
+```
+
+#### 2. 启动阶段 1（需求分析）
+```bash
+python scripts/agent_orchestrator.py --phase 1
+```
+
+#### 3. 启动阶段 2（架构设计）
+```bash
+python scripts/agent_orchestrator.py --phase 2
+```
+
+#### 4. 启动阶段 3-7（详细设计、代码实现、测试验证、文档编写、部署发布）
+```bash
+# TODO: 阶段 3-7 尚未实现，正在开发中...
+```
+
+### 脚本功能
+
+| 功能 | 说明 |
+|------|------|
+| **自动执行任务** | 按照协作计划，自动执行每个阶段的任务 |
+| **调用 Skills** | 自动调用 Grill Me、Deep Research、TDD 等 Skills |
+| **Human-in-the-loop** | 每个任务完成后，等待用户确认 |
+| **自动 GitHub 提交** | 每个任务完成后，自动 `git add`、`git commit`、`git push` |
+| **错误处理** | 如果命令执行失败，提示用户手动处理 |
+
+### 注意事项
+
+1. **Human-in-the-loop**：脚本会在每个任务完成后暂停，等你确认。请仔细阅读提示，按需编辑文件。
+2. **Git 提交**：脚本会自动提交，但如果有冲突，需要你手动解决。
+3. **Skill 调用**：目前脚本中的 Skill 调用是模拟的，实际使用时需要替换为真实的 Skill 调用逻辑。
+
+---
+
+## 📝 下一步
+
+**脚本已实现**：
+- ✅ 阶段 1（需求分析）
+- ✅ 阶段 2（架构设计）
+- ❌ 阶段 3-7（详细设计、代码实现、测试验证、文档编写、部署发布）
 
 **你想要我**：
 
-**选项 A**：立即启动 **阶段 1（需求分析）**，开始执行 `business-analyst` Agent 的任务？
+**选项 A**：立即运行 `python scripts/agent_orchestrator.py --phase 1`，开始执行阶段 1？
 
-**选项 B**：我先帮你**创建一个 GitHub Project 看板**，将每个任务作为 Issue 管理？
+**选项 B**：先完善脚本，实现阶段 3-7？
 
-**选项 C**：我先帮你**编写 GitHub Actions 自动化工作流**，实现自动测试、自动打包？
-
-**选项 D**：我帮你**编写一个启动脚本**，一键启动所有 Agent？
+**选项 C**：先手动执行阶段 1，而不是使用脚本？
 
 请告诉我你的选择！
