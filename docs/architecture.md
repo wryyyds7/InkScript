@@ -615,25 +615,24 @@ class AppConfig(BaseSettings):
 
 #### 实现方案
 
-##### 3.8.1 分段阈值自动计算
+##### 3.8.1 分段阈值自动计算（保守估计）
 
 ```python
 # core/text_segmenter.py
 def calculate_threshold(model_context_length: int) -> int:
-    """根据模型上下文长度自动计算分段阈值"""
-    # 假设平均每个字符约 0.5 个 token（中文）
-    avg_token_per_char = 0.5
+    """根据模型上下文长度自动计算分段阈值（保守估计：1 个字符 = 1 个 token）"""
+    # 保守估计：1 个字符 = 1 个 token（避免 token 超限）
     # 保留 20% 的余量
-    threshold = int(model_context_length * 0.8 / avg_token_per_char)
+    threshold = int(model_context_length * 0.8)
     return threshold
 ```
 
-##### 3.8.2 分段策略
+##### 3.8.2 分段策略（可配置上下文窗口）
 
 ```python
 # core/text_segmenter.py
-def segment_text(text: str, threshold: int) -> list[str]:
-    """智能分段"""
+def segment_text(text: str, threshold: int, context_window_size: int = 200) -> list[str]:
+    """智能分段（可配置上下文窗口大小）"""
     if len(text) <= threshold:
         return [text]
     
@@ -644,8 +643,11 @@ def segment_text(text: str, threshold: int) -> list[str]:
         if len(current_segment) + len(paragraph) > threshold:
             # 当前段已达到阈值，保存并开始新段
             segments.append(current_segment)
-            # 添加上下文窗口（前一段的最后 200 字）
-            context_window = current_segment[-200:] if len(current_segment) > 200 else current_segment
+            # 添加上下文窗口（前一段的最后 context_window_size 字）
+            if len(current_segment) > context_window_size:
+                context_window = current_segment[-context_window_size:]
+            else:
+                context_window = current_segment
             current_segment = context_window + "\n" + paragraph
         else:
             current_segment += "\n" + paragraph
@@ -670,12 +672,38 @@ def build_prompt(segment: str, previous_summary: str = "") -> str:
     return prompt
 ```
 
-##### 3.8.4 跨段合并策略
+##### 3.8.4 跨段合并策略（含角色别名合并）
 
 分段处理完成后，使用全局角色表和场景图进行合并，确保 ID 统一：
 
 ```python
 # core/merger.py
+from difflib import get_close_matches
+
+def merge_characters(character_lists: list[list[Character]]) -> list[Character]:
+    """合并多个分段中的角色表（去重、别名合并）"""
+    global_registry = {}
+    
+    for char_list in character_lists:
+        for char in char_list:
+            # 1. 检查是否已存在相似角色名（别名合并）
+            existing_name = find_similar_character(char.name, global_registry.keys())
+            if existing_name:
+                # 合并到已存在角色
+                existing_char = global_registry[existing_name]
+                existing_char.aliases.append(char.name)
+                existing_char.mentions.extend(char.mentions)
+            else:
+                # 新增角色
+                global_registry[char.name] = char
+    
+    return list(global_registry.values())
+
+def find_similar_character(name: str, existing_names: list[str], threshold: float = 0.8) -> str | None:
+    """查找相似角色名（字符串相似度 >= threshold 则认为是同一角色）"""
+    matches = get_close_matches(name, existing_names, n=1, cutoff=threshold)
+    return matches[0] if matches else None
+
 def merge_segments(segment_results: list[SegmentResult]) -> Script:
     """合并分段结果"""
     # 1. 合并角色表（去重、别名合并）
@@ -698,7 +726,8 @@ def merge_segments(segment_results: list[SegmentResult]) -> Script:
 |---------|---------|---------|
 | 新的分段策略 | 实现 `SegmentStrategy` Protocol | 仅新增文件 |
 | 动态阈值 | 从配置读取分段阈值 | 仅配置文件 |
-| 上下文窗口大小 | 从配置读取 | 仅配置文件 |
+| 上下文窗口大小 | 从配置读取 `context_window_size` | 仅配置文件 |
+| 角色别名合并算法 | 替换 `find_similar_character()` 函数 | 仅 `merger.py` |
 
 ---
 
@@ -1142,14 +1171,24 @@ class ProjectStore(Protocol):
 
 **关键设计**：`ProjectStore` 是 `Protocol`（接口），不是具体实现。当前默认实现是 `FileSystemProjectStore`，后续换 SQLite 只需写新实现类，**业务逻辑零改动**。
 
-### 6.2 项目目录结构
+### 6.2 项目目录结构（含版本历史和回收站）
 
 ```
-~/.novel2script/projects/<project_id>/
-├── novel.txt                  # 小说原文
-├── script.yaml               # YAML 剧本
-├── meta.json                 # 项目元信息
-└── config_snapshot.json      # 项目创建时的配置快照
+~/.novel2script/
+├── projects/<project_id>/
+│   ├── novel.txt                  # 小说原文
+│   ├── script.yaml               # YAML 剧本（当前版本）
+│   ├── meta.json                 # 项目元信息
+│   ├── config_snapshot.json      # 项目创建时的配置快照
+│   └── versions/                # 版本历史（自动生成）
+│       ├── script_v1.yaml        # 第 1 个版本
+│       ├── script_v2.yaml        # 第 2 个版本
+│       └── ...
+└── trash/                       # 回收站（删除的项目备份）
+    └── <project_id>_<timestamp>/  # 已删除项目（可恢复）
+        ├── novel.txt
+        ├── script.yaml
+        └── meta.json
 ```
 
 ### 6.3 meta.json 结构
@@ -1186,6 +1225,9 @@ class FileSystemProjectStore:
     """基于文件系统的 ProjectStore 实现"""
 
     PROJECTS_DIR = Path.home() / ".novel2script" / "projects"
+    TRASH_DIR = Path.home() / ".novel2script" / "trash"
+    VERSIONS_DIR = "versions"  # 项目目录下的版本历史文件夹
+    MAX_VERSIONS = 10  # 最多保留 10 个版本
 
     async def create_project(self, title: str, novel_text: str = "") -> Project:
         project_id = f"proj_{uuid4().hex}"  # 完整 hex，避免碰撞
@@ -1197,6 +1239,9 @@ class FileSystemProjectStore:
 
         # 初始化空剧本
         (project_dir / "script.yaml").write_text("", encoding="utf-8")
+
+        # 创建版本历史文件夹
+        (project_dir / self.VERSIONS_DIR).mkdir(exist_ok=True)
 
         # 写入元信息
         meta = ProjectMeta(
@@ -1224,19 +1269,99 @@ class FileSystemProjectStore:
             updated_at=datetime.now(),
             novel_word_count=len(content),
         )
+
+    async def save_script(self, project_id: str, content: str) -> None:
+        """保存剧本 YAML（自动生成版本快照）"""
+        project_dir = self.PROJECTS_DIR / project_id
+        script_path = project_dir / "script.yaml"
+        
+        # 1. 如果已存在 script.yaml，生成版本快照
+        if script_path.exists():
+            version_num = self._get_next_version_number(project_dir)
+            version_path = project_dir / self.VERSIONS_DIR / f"script_v{version_num}.yaml"
+            shutil.copy2(script_path, version_path)  # 复制当前版本到 versions/
+            
+            # 2. 限制版本数量（最多保留 MAX_VERSIONS 个）
+            self._cleanup_old_versions(project_dir)
+        
+        # 3. 保存新版本
+        script_path.write_text(content, encoding="utf-8")
+        
+        # 4. 更新元信息
+        await self._update_meta_field(project_id,
+            updated_at=datetime.now(),
+            script_beat_count=len(content.split("type:")),  # 简单估算 Beat 数量
+        )
+
+    def _get_next_version_number(self, project_dir: Path) -> int:
+        """获取下一个版本号"""
+        versions_dir = project_dir / self.VERSIONS_DIR
+        existing_versions = list(versions_dir.glob("script_v*.yaml"))
+        if not existing_versions:
+            return 1
+        version_numbers = [int(v.stem.split("_v")[1]) for v in existing_versions]
+        return max(version_numbers) + 1
+
+    def _cleanup_old_versions(self, project_dir: Path) -> None:
+        """清理旧版本（只保留最新的 MAX_VERSIONS 个）"""
+        versions_dir = project_dir / self.VERSIONS_DIR
+        all_versions = sorted(versions_dir.glob("script_v*.yaml"), key=lambda x: int(x.stem.split("_v")[1]))
+        
+        while len(all_versions) > self.MAX_VERSIONS:
+            oldest_version = all_versions.pop(0)
+            oldest_version.unlink()
+
+    async def delete_project(self, project_id: str) -> None:
+        """删除项目（进入回收站）"""
+        project_dir = self.PROJECTS_DIR / project_id
+        if not project_dir.exists():
+            raise ProjectNotFoundError(f"项目 {project_id} 不存在")
+
+        # 1. 创建回收站目录（如果不存在）
+        self.TRASH_DIR.mkdir(parents=True, exist_ok=True)
+
+        # 2. 生成回收站中的项目目录名（加时间戳）
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        trash_dir_name = f"{project_id}_{timestamp}"
+        trash_dir = self.TRASH_DIR / trash_dir_name
+
+        # 3. 移动到回收站
+        shutil.move(str(project_dir), str(trash_dir))
+
+    async def restore_project(self, project_id: str) -> None:
+        """从回收站恢复项目"""
+        # 1. 查找回收站中最新的备份
+        matching_dirs = list(self.TRASH_DIR.glob(f"{project_id}_*"))
+        if not matching_dirs:
+            raise ProjectNotFoundError(f"回收站中找不到项目 {project_id}")
+
+        latest_dir = max(matching_dirs, key=os.path.getmtime)  # 最新的目录
+
+        # 2. 恢复项目
+        target_dir = self.PROJECTS_DIR / project_id
+        if target_dir.exists():
+            raise ProjectAlreadyExistsError(f"项目 {project_id} 已存在，无法恢复")
+
+        shutil.move(str(latest_dir), str(target_dir))
 ```
 
-### 6.5 项目管理 API
+### 6.5 项目管理 API（含版本历史和回收站）
 
 | 方法 | 路径 | 功能 |
 |------|------|------|
 | GET | `/api/v1/projects` | 项目列表 |
 | POST | `/api/v1/projects` | 创建项目 |
 | GET | `/api/v1/projects/{id}` | 获取项目详情 |
-| DELETE | `/api/v1/projects/{id}` | 删除项目 |
+| DELETE | `/api/v1/projects/{id}` | 删除项目（进入回收站） |
 | PUT | `/api/v1/projects/{id}/novel` | 保存小说原文（自动保存） |
-| PUT | `/api/v1/projects/{id}/script` | 保存剧本 YAML（自动保存） |
+| PUT | `/api/v1/projects/{id}/script` | 保存剧本 YAML（自动保存，生成版本快照） |
 | POST | `/api/v1/projects/{id}/beat/{beat_id}` | 更新单个 Beat |
+| GET | `/api/v1/projects/{id}/versions` | 获取版本历史列表 |
+| GET | `/api/v1/projects/{id}/versions/{version}` | 下载指定版本 |
+| POST | `/api/v1/projects/{id}/versions/{version}/restore` | 恢复到指定版本 |
+| GET | `/api/v1/trash` | 查看回收站 |
+| POST | `/api/v1/trash/{project_id}/restore` | 从回收站恢复项目 |
+| DELETE | `/api/v1/trash/{project_id}` | 永久删除项目 |
 
 ```python
 # POST /api/v1/projects
@@ -1401,8 +1526,25 @@ src/skills/
     "type": "exporter",
     "inputs": ["yaml_path"],
     "outputs": ["fountain_path"],
-    "requires_llm": false
+    "requires_llm": false,
+    "enabled": true,
+    "priority": 0
 }
+```
+
+**字段说明**：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `name` | string | ✅ | Skill 唯一标识 |
+| `display_name` | string | ✅ | 显示名称 |
+| `description` | string | ✅ | 功能描述 |
+| `type` | string | ✅ | 类型（`pre_processor`/`post_processor`/`exporter`/`analyzer`） |
+| `inputs` | list[string] | ✅ | 输入参数列表 |
+| `outputs` | list[string] | ✅ | 输出参数列表 |
+| `requires_llm` | bool | ❌ | 是否需要 LLM 客户端（默认 `false`） |
+| `enabled` | bool | ❌ | 是否启用（默认 `true`） |
+| `priority` | int | ❌ | 优先级（数值越大优先级越高，默认 `0`） |
 ```
 
 ### 7.6 main.py 入口
@@ -1504,18 +1646,18 @@ skill_manager.add_hook("on_error", log_skill_error)
 Pipeline 执行流程中 Skill 的注入点：
 
   1. 加载输入文件
-  2. ──▶ 执行所有已启用的 pre_processor Skill    ← 输入：原始文本
+  2. ──▶ 执行所有已启用的 pre_processor Skill（按 priority 排序）   ← 输入：原始文本
   3. 文本分段
   4. 角色 → 场景 → 对白 → 情绪（Pipeline Steps）
   5. 分段合并
   6. YAML 生成 + 校验
-  7. ──▶ 执行所有已启用的 post_processor Skill   ← 输入：YAML 路径
-  8. ──▶ 执行所有已启用的 exporter Skill          ← 输入：YAML 路径（用户主动触发）
-  9. ──▶ 执行所有已启用的 analyzer Skill          ← 输入：YAML 路径（用户主动触发）
+  7. ──▶ 执行所有已启用的 post_processor Skill（按 priority 排序）   ← 输入：YAML 路径
+  8. ──▶ 执行所有已启用的 exporter Skill（按 priority 排序）          ← 输入：YAML 路径（用户主动触发）
+  9. ──▶ 执行所有已启用的 analyzer Skill（按 priority 排序）          ← 输入：YAML 路径（用户主动触发）
   10. 返回结果
 ```
 
-**Skill 错误隔离**：Skill 失败不影响核心 Pipeline 流程：
+**Skill 错误隔离**：Skill 失败不影响核心 Pipeline 流程，但会记录错误日志并推送前端：
 
 ```python
 async def execute_skill_safe(self, name: str, data: dict, config: dict) -> SkillResult:
@@ -1526,15 +1668,35 @@ async def execute_skill_safe(self, name: str, data: dict, config: dict) -> Skill
         return SkillResult(skill_name=name, success=True, data=result,
                            duration_seconds=time.monotonic() - start)
     except SkillDisabledError:
+        error_msg = f"Skill '{name}' 已禁用"
+        await self._log_skill_error(name, error_msg)
         return SkillResult(skill_name=name, success=False,
-                           error="Skill 已禁用", duration_seconds=0)
+                           error=error_msg, duration_seconds=0)
     except SkillNotFoundError:
+        error_msg = f"Skill '{name}' 不存在"
+        await self._log_skill_error(name, error_msg)
         return SkillResult(skill_name=name, success=False,
-                           error="Skill 不存在", duration_seconds=0)
+                           error=error_msg, duration_seconds=0)
     except Exception as e:
-        logger.error(f"Skill '{name}' 执行失败: {e}", exc_info=True)
+        error_msg = f"Skill '{name}' 执行失败: {e}"
+        logger.error(error_msg, exc_info=True)
+        await self._log_skill_error(name, error_msg)
         return SkillResult(skill_name=name, success=False,
                            error=str(e), duration_seconds=time.monotonic() - start)
+
+async def _log_skill_error(self, skill_name: str, error_msg: str):
+    """记录 Skill 错误日志（写入项目目录）"""
+    if self._current_project_id:
+        error_log_path = Path.home() / ".novel2script" / "projects" / self._current_project_id / "skill_errors.log"
+        with open(error_log_path, "a", encoding="utf-8") as f:
+            f.write(f"[{datetime.now()}] {error_msg}\n")
+    
+    # 推送 SSE 事件
+    if self._sse_manager:
+        await self._sse_manager.push_event("skill_error", {
+            "skill_name": skill_name,
+            "error": error_msg
+        })
 ```
 
 ### 7.12 动态加载机制
@@ -1565,7 +1727,7 @@ run_fn = module.run  # 获取入口函数
 
 ## 8. 配置管理
 
-### 8.1 配置层级
+### 8.1 配置层级（含冲突处理策略）
 
 ```
 默认值（代码中）
@@ -1579,14 +1741,25 @@ run_fn = module.run  # 获取入口函数
 运行时参数（CLI --option / API 请求体）
 ```
 
-### 8.2 配置模型
+**冲突处理策略**：高优先级覆盖低优先级。例如：
+- 如果配置文件中设置了 `model_name = "gpt-4o-mini"`，
+- 但环境变量设置了 `N2S_MODEL_NAME = "gpt-4"`，
+- 则最终使用 `gpt-4`（环境变量优先级更高）。
+
+### 8.2 配置模型（含错误处理）
 
 ```python
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator, ValidationError
+import json
+
 class AppConfig(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="N2S_",
         json_file="~/.novel2script/config.json",
         json_file_encoding="utf-8",
+        extra="ignore",  # 忽略配置文件中的未知字段
+        validate_default=True,  # 校验默认值
     )
 
     # LLM 配置
@@ -1611,15 +1784,105 @@ class AppConfig(BaseSettings):
     # 服务配置
     host: str = "127.0.0.1"
     port: int = 8765
+
+    # 超时配置
+    timeout_dynamic: bool = True  # 是否启用动态超时
+    timeout_total: int = 3600  # 总超时（秒），默认 1 小时
+    timeout_per_request: int = 300  # 单个 LLM 请求超时（秒），默认 5 分钟
+    max_retries: int = 3  # 失败重试次数
+    retry_delay_base: float = 2.0  # 重试延迟基数（秒），指数退避
+
+    # 长文本分段配置
+    context_window_size: int = 200  # 上下文窗口大小（字符数）
+
+    @field_validator("temperature")
+    def validate_temperature(cls, v):
+        if not 0.0 <= v <= 2.0:
+            raise ValueError("temperature 必须在 0.0 和 2.0 之间")
+        return v
+
+    @field_validator("max_concurrent")
+    def validate_max_concurrent(cls, v):
+        if v < 1:
+            raise ValueError("max_concurrent 必须 >= 1")
+        return v
+
+def load_config() -> AppConfig:
+    """加载配置（捕获配置文件格式错误）"""
+    try:
+        config = AppConfig()
+        return config
+    except ValidationError as e:
+        # 配置文件格式错误，使用默认值
+        logger.error(f"配置文件格式错误: {e}，使用默认配置")
+        # 通知用户（通过 SSE 或前端弹窗）
+        notify_config_error(f"配置文件格式错误: {e}")
+        return AppConfig()  # 使用默认值
 ```
 
-### 8.3 配置 API
+**安全考量**：
+- GET 返回配置时，`api_key` 字段只显示末 4 位（如 `sk-****a1b2`），避免密钥泄露。
+- PUT 更新时支持完整密钥写入。
+- **API Key 加密存储**（见 8.2.1）。
+
+#### 8.2.1 API Key 加密存储
+
+使用 `cryptography` 库的 **Fernet 对称加密**，密钥存储在操作系统提供的密钥管理服务中：
+
+```python
+# config.py
+from cryptography.fernet import Fernet
+import keyring  # 跨平台密钥管理库
+
+def encrypt_api_key(api_key: str) -> str:
+    """加密 API Key"""
+    # 1. 从操作系统密钥管理服务中获取加密密钥
+    encryption_key = keyring.get_password("novel2script", "encryption_key")
+    if not encryption_key:
+        # 首次使用，生成新密钥并保存
+        encryption_key = Fernet.generate_key().decode()
+        keyring.set_password("novel2script", "encryption_key", encryption_key)
+    
+    # 2. 加密 API Key
+    fernet = Fernet(encryption_key.encode())
+    encrypted_key = fernet.encrypt(api_key.encode()).decode()
+    return encrypted_key
+
+def decrypt_api_key(encrypted_key: str) -> str:
+    """解密 API Key"""
+    # 1. 从操作系统密钥管理服务中获取加密密钥
+    encryption_key = keyring.get_password("novel2script", "encryption_key")
+    if not encryption_key:
+        raise ValueError("加密密钥不存在")
+    
+    # 2. 解密 API Key
+    fernet = Fernet(encryption_key.encode())
+    decrypted_key = fernet.decrypt(encrypted_key.encode()).decode()
+    return decrypted_key
+```
+
+**加密流程**：
+1. 用户首次输入 API Key 时，程序生成 Fernet 密钥（存在内存中）。
+2. 将 Fernet 密钥保存到操作系统密钥管理服务（Windows DPAPI、macOS Keychain、Linux Secret Service）。
+3. 使用 Fernet 密钥加密 API Key，并保存到 `config.json`。
+4. 下次启动时，从操作系统密钥管理服务读取 Fernet 密钥，解密 `config.json` 中的 API Key。
+
+**依赖**：
+- `cryptography`：用于 Fernet 加密。
+- `keyring`：用于跨平台密钥管理。
+
+```bash
+pip install cryptography keyring
+```
+
+### 8.3 配置 API（含错误通知）
 
 | 方法 | 路径 | 功能 |
 |------|------|------|
 | GET | `/api/v1/config` | 获取当前配置（api_key 脱敏） |
-| PUT | `/api/v1/config` | 更新配置 |
+| PUT | `/api/v1/config` | 更新配置（支持加密 API Key） |
 | POST | `/api/v1/config/test` | 测试 API 连接是否可用 |
+| GET | `/api/v1/config/errors` | 获取配置文件错误历史 |
 
 **安全考量**：GET 返回配置时，`api_key` 字段只显示末 4 位（如 `sk-****a1b2`），避免密钥泄露。PUT 更新时支持完整密钥写入。
 
@@ -1750,9 +2013,10 @@ async def process_segments_concurrently(
 
 ### 11.1 设计目标
 
-1. **超长超时**：设置超长超时（1 小时），避免频繁超时
-2. **网络问题处理**：如果网络问题导致超时，继续等待，不立即报错
+1. **动态超时**：根据输入文本长度和模型速度动态调整超时时间
+2. **自动重试**：单个步骤超时后自动重试（最多 3 次，指数退避）
 3. **用户可手动取消**：用户提供取消按钮，可随时取消转换任务
+4. **取消后清理**：用户取消后，自动清理临时文件
 
 ### 11.2 实现方案
 
@@ -1762,65 +2026,112 @@ async def process_segments_concurrently(
 # config.py
 class AppConfig(BaseSettings):
     # 超时配置
-    timeout_total: int = 3600  # 总超时（秒），默认 1 小时
+    timeout_dynamic: bool = True  # 是否启用动态超时
+    timeout_total: int = 3600  # 总超时（秒），默认 1 小时（动态调整时作为最小值）
     timeout_per_request: int = 300  # 单个 LLM 请求超时（秒），默认 5 分钟
     max_retries: int = 3  # 失败重试次数
+    retry_delay_base: float = 2.0  # 重试延迟基数（秒），指数退避
 ```
 
-#### 11.2.2 超时处理逻辑
+#### 11.2.2 动态超时计算
+
+```python
+# core/pipeline.py
+class Pipeline:
+    def _calculate_dynamic_timeout(self, novel_word_count: int, model_speed_factor: float) -> int:
+        """根据输入文本长度和模型速度动态计算超时时间"""
+        # 估算时间：每 1000 字需要 model_speed_factor 秒
+        estimated_time = (novel_word_count / 1000) * model_speed_factor
+        # 超时时间 = max(默认超时, 预估时间 * 2)
+        timeout = max(self.config.timeout_total, estimated_time * 2)
+        return int(timeout)
+```
+
+#### 11.2.3 超时处理逻辑（带自动重试）
 
 ```python
 # core/pipeline.py
 class Pipeline:
     async def run(self, context: PipelineContext, callback: ProgressCallback | None = None) -> PipelineContext:
-        """执行 Pipeline，带超时处理"""
+        """执行 Pipeline，带超时处理和自动重试"""
+        # 如果启用动态超时，计算超时时间
+        if self.config.timeout_dynamic:
+            timeout_total = self._calculate_dynamic_timeout(
+                novel_word_count=len(context.novel_text),
+                model_speed_factor=10.0  # gpt-4o-mini 每 1000 字约 10 秒
+            )
+        else:
+            timeout_total = self.config.timeout_total
+        
         try:
             # 设置总超时
-            async with asyncio.timeout(self.config.timeout_total):
+            async with asyncio.timeout(timeout_total):
                 for i, step_name in enumerate(self._step_order):
                     step = self._steps[step_name]
-                    try:
-                        # 设置单个步骤超时
-                        async with asyncio.timeout(self.config.timeout_per_request):
-                            context = await step.run(context)
-                    except asyncio.TimeoutError:
-                        # 单个步骤超时，记录错误，继续下一个步骤（优雅降级）
-                        logger.error(f"步骤 '{step_name}' 超时")
-                        if callback:
-                            callback.on_error(step_name, "步骤超时")
-                        # 不中断 Pipeline，继续下一个步骤
+                    # 单个步骤超时，自动重试（最多 max_retries 次）
+                    for retry in range(self.config.max_retries):
+                        try:
+                            # 设置单个步骤超时
+                            async with asyncio.timeout(self.config.timeout_per_request):
+                                context = await step.run(context)
+                            break  # 成功，跳出重试循环
+                        except asyncio.TimeoutError:
+                            if retry < self.config.max_retries - 1:
+                                # 重试，指数退避
+                                delay = self.config.retry_delay_base ** retry
+                                logger.warning(f"步骤 '{step_name}' 超时，{delay} 秒后重试 ({retry+1}/{self.config.max_retries})")
+                                await asyncio.sleep(delay)
+                            else:
+                                # 重试次数用尽，终止整个 Pipeline
+                                logger.error(f"步骤 '{step_name}' 重试 {self.config.max_retries} 次后仍超时")
+                                raise PipelineTimeoutError(f"步骤 '{step_name}' 超时，请检查网络连接或减小输入文本长度")
         except asyncio.TimeoutError:
             # 总超时
             logger.error("Pipeline 总超时")
             raise PipelineTimeoutError("转换任务总超时，请检查网络连接或减小输入文本长度")
 ```
 
-#### 11.2.3 用户取消机制
+#### 11.2.4 用户取消机制（带清理逻辑）
 
 ```python
 # core/pipeline.py
 class Pipeline:
     def __init__(self):
         self._cancel_requested = False
+        self._temp_files: list[str] = []  # 记录临时文件
     
     def cancel(self):
         """取消转换任务"""
         self._cancel_requested = True
     
+    def _cleanup_temp_files(self):
+        """清理临时文件"""
+        for temp_file in self._temp_files:
+            try:
+                os.remove(temp_file)
+                logger.info(f"已删除临时文件: {temp_file}")
+            except Exception as e:
+                logger.error(f"删除临时文件失败: {temp_file}, 错误: {e}")
+    
     async def run(self, context: PipelineContext, callback: ProgressCallback | None = None) -> PipelineContext:
-        """执行 Pipeline，支持取消"""
-        for i, step_name in enumerate(self._step_order):
-            # 检查取消请求
-            if self._cancel_requested:
-                raise PipelineCancelledError("转换任务已取消")
+        """执行 Pipeline，支持取消和清理"""
+        try:
+            for i, step_name in enumerate(self._step_order):
+                # 检查取消请求
+                if self._cancel_requested:
+                    self._cleanup_temp_files()
+                    raise PipelineCancelledError("转换任务已取消")
+                
+                step = self._steps[step_name]
+                context = await step.run(context)
             
-            step = self._steps[step_name]
-            context = await step.run(context)
-        
-        return context
+            return context
+        except PipelineCancelledError:
+            self._cleanup_temp_files()
+            raise
 ```
 
-#### 11.2.4 前端取消按钮
+#### 11.2.5 前端取消按钮
 
 ```javascript
 // web/js/editor.js
@@ -1837,8 +2148,9 @@ function cancelConversion() {
 | 扩展方向 | 如何接入 | 改动范围 |
 |---------|---------|---------|
 | 调整超时时间 | 修改配置文件 | 仅配置文件 |
-| 新增超时策略 | 扩展 `Pipeline` 类 | 仅 `pipeline.py` |
-| 超时后自动重试 | 在 `except asyncio.TimeoutError` 中添加重试逻辑 | 仅 `pipeline.py` |
+| 动态超时算法 | 重写 `_calculate_dynamic_timeout()` 方法 | 仅 `pipeline.py` |
+| 重试策略 | 修改 `run()` 方法中的重试逻辑 | 仅 `pipeline.py` |
+| 清理逻辑 | 扩展 `_cleanup_temp_files()` 方法 | 仅 `pipeline.py` |
 
 ---
 
@@ -1846,35 +2158,40 @@ function cancelConversion() {
 
 ### 12.1 设计目标
 
-1. **支持多种章标题格式**：正则匹配常见章标题格式
+1. **支持多种章标题格式**：正则匹配常见章标题格式（中英文）
 2. **无章标题处理**：如果文本没有章标题，整篇当作一个"全文"章处理
-3. **智能分章**：无章标题且文本≥6000字时，自动分割
-4. **用户可手动干预**：支持用户手动插入章节标记
+3. **智能分章**：无章标题且文本≥6000字时，按场景跳转关键词自动分割
+4. **用户可手动干预**：支持用户手动插入章节标记（优先级高于自动分割）
+5. **分割点选择**：优先按场景跳转关键词分割，而非简单按空行分割
 
 ### 12.2 实现方案
 
-#### 12.2.1 章标题识别
+#### 12.2.1 章标题识别（支持中英文）
 
 ```python
 # core/chapter_splitter.py
 import re
 
 CHAPTER_PATTERNS = [
+    # 中文格式
     r"第[一二三四五六七八九十百千]+章",  # 第一章、第二章...
     r"第[0123456789]+章",              # 第1章、第2章...
+    # 英文格式
     r"Chapter\s+[0-9]+",              # Chapter 1、Chapter 2...
-    r"PART\s+[0-9]+",                 # PART 1、PART 2...
+    r"CHAPTER\s+[IVXLCDM]+",          # CHAPTER I、CHAPTER II、CHAPTER XI...
+    r"Part\s+[0-9]+",                 # Part 1、Part 2...
+    r"PART\s+[IVXLCDM]+",             # PART I、PART II...
 ]
 
 def detect_chapters(text: str) -> list[Chapter]:
-    """识别章节结构"""
+    """识别章节结构（支持中英文）"""
     lines = text.split("\n")
     chapters = []
     current_chapter = None
     
     for i, line in enumerate(lines):
         # 检查是否匹配章标题
-        if any(re.search(pattern, line) for pattern in CHAPTER_PATTERNS):
+        if any(re.search(pattern, line, re.IGNORECASE) for pattern in CHAPTER_PATTERNS):
             # 保存上一章
             if current_chapter:
                 chapters.append(current_chapter)
@@ -1896,56 +2213,83 @@ def detect_chapters(text: str) -> list[Chapter]:
     return chapters
 ```
 
-#### 12.2.2 无章标题自动分割
+#### 12.2.2 无章标题自动分割（按场景跳转关键词）
 
 ```python
 # core/chapter_splitter.py
+
+# 场景跳转关键词列表
+SCENE_TRANSITION_KEYWORDS = [
+    "与此同时", "另一边", "此时", "同一时间",
+    "几小时后", "第二天", "一周后", "不久之后",
+    "镜头切换", "场景转换", "---",
+]
+
 def auto_split_chapters(text: str, threshold: int = 6000) -> list[Chapter]:
-    """无章标题时自动分割"""
+    """无章标题时自动分割（按场景跳转关键词）"""
     if len(text) < threshold:
         # 文本较短，整篇当作一章
         return [Chapter(title="全文", paragraphs=text.split("\n"))]
     
-    # 按空行分割
-    paragraphs = text.split("\n\n")
+    # 先按场景跳转关键词分割
+    paragraphs = text.split("\n")
     
     chapters = []
     current_chapter = []
     current_length = 0
+    chapter_num = 1
     
     for para in paragraphs:
-        if current_length + len(para) > threshold:
-            # 当前章已达到阈值，保存并开始新章
-            chapters.append(Chapter(
-                title=f"第{len(chapters)+1}章（自动分割）",
-                paragraphs=current_chapter
-            ))
-            current_chapter = []
-            current_length = 0
+        # 检查是否包含场景跳转关键词
+        if any(keyword in para for keyword in SCENE_TRANSITION_KEYWORDS):
+            # 保存上一章
+            if current_chapter:
+                chapters.append(Chapter(
+                    title=f"第{chapter_num}章（自动分割）",
+                    paragraphs=current_chapter
+                ))
+                chapter_num += 1
+                current_chapter = []
+                current_length = 0
         
         current_chapter.append(para)
         current_length += len(para)
+        
+        # 如果当前章长度超过阈值，也进行分割
+        if current_length > threshold:
+            if current_chapter:
+                chapters.append(Chapter(
+                    title=f"第{chapter_num}章（自动分割）",
+                    paragraphs=current_chapter
+                ))
+                chapter_num += 1
+                current_chapter = []
+                current_length = 0
     
     # 保存最后一章
     if current_chapter:
         chapters.append(Chapter(
-            title=f"第{len(chapters)+1}章（自动分割）",
+            title=f"第{chapter_num}章（自动分割）",
             paragraphs=current_chapter
         ))
     
     return chapters
 ```
 
-#### 12.2.3 用户手动插入章节标记
+#### 12.2.3 用户手动插入章节标记（优先级高于自动分割）
 
 ```python
-# 用户可以在文本中插入以下标记：
+# 用户可以在文本中插入以下标记（优先级高于自动分割）：
 # --- Chapter X ---
 
-def parse_manual_chapters(text: str) -> list[Chapter]:
-    """解析手动插入的章节标记"""
+def parse_manual_chapters(text: str) -> list[Chapter] | None:
+    """解析手动插入的章节标记（如果存在，优先级高于自动分割）"""
     pattern = r"---\s*Chapter\s+(\d+)\s*---"
     parts = re.split(pattern, text)
+    
+    # 如果没有手动标记，返回 None（调用方会 fallback 到自动分割）
+    if len(parts) <= 1:
+        return None
     
     chapters = []
     for i in range(1, len(parts), 2):
@@ -1957,6 +2301,21 @@ def parse_manual_chapters(text: str) -> list[Chapter]:
         ))
     
     return chapters
+
+def split_chapters(text: str, threshold: int = 6000) -> list[Chapter]:
+    """智能分章（手动标记优先级高于自动分割）"""
+    # 1. 先尝试解析手动章节标记
+    manual_chapters = parse_manual_chapters(text)
+    if manual_chapters:
+        return manual_chapters
+    
+    # 2. 再尝试识别章标题
+    detected_chapters = detect_chapters(text)
+    if len(detected_chapters) > 1:  # 如果识别到多个章标题
+        return detected_chapters
+    
+    # 3. 最后 fallback 到自动分割
+    return auto_split_chapters(text, threshold)
 ```
 
 ### 12.3 扩展点
@@ -1964,6 +2323,7 @@ def parse_manual_chapters(text: str) -> list[Chapter]:
 | 扩展方向 | 如何接入 | 改动范围 |
 |---------|---------|---------|
 | 支持新的章标题格式 | 在 `CHAPTER_PATTERNS` 中添加正则 | 仅 `chapter_splitter.py` |
+| 自定义场景跳转关键词 | 在 `SCENE_TRANSITION_KEYWORDS` 中添加关键词 | 仅 `chapter_splitter.py` |
 | 自定义分割策略 | 实现 `ChapterSplitStrategy` Protocol | 仅新增文件 |
 | 手动章节标记格式 | 扩展 `parse_manual_chapters` 函数 | 仅 `chapter_splitter.py` |
 
