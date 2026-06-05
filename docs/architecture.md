@@ -613,12 +613,92 @@ class AppConfig(BaseSettings):
 
 将超长小说（> 阈值）智能分段，每段独立处理后再合并。
 
+#### 实现方案
+
+##### 3.8.1 分段阈值自动计算
+
+```python
+# core/text_segmenter.py
+def calculate_threshold(model_context_length: int) -> int:
+    """根据模型上下文长度自动计算分段阈值"""
+    # 假设平均每个字符约 0.5 个 token（中文）
+    avg_token_per_char = 0.5
+    # 保留 20% 的余量
+    threshold = int(model_context_length * 0.8 / avg_token_per_char)
+    return threshold
+```
+
+##### 3.8.2 分段策略
+
+```python
+# core/text_segmenter.py
+def segment_text(text: str, threshold: int) -> list[str]:
+    """智能分段"""
+    if len(text) <= threshold:
+        return [text]
+    
+    segments = []
+    current_segment = ""
+    
+    for paragraph in text.split("\n"):
+        if len(current_segment) + len(paragraph) > threshold:
+            # 当前段已达到阈值，保存并开始新段
+            segments.append(current_segment)
+            # 添加上下文窗口（前一段的最后 200 字）
+            context_window = current_segment[-200:] if len(current_segment) > 200 else current_segment
+            current_segment = context_window + "\n" + paragraph
+        else:
+            current_segment += "\n" + paragraph
+    
+    # 保存最后一段
+    if current_segment:
+        segments.append(current_segment)
+    
+    return segments
+```
+
+##### 3.8.3 上下文窗口实现
+
+在每段 Prompt 中添加 `previous_summary` 字段，包含前一段的摘要（由 LLM 生成）：
+
+```python
+# prompts/extract_characters.py
+def build_prompt(segment: str, previous_summary: str = "") -> str:
+    prompt = f"请提取以下小说片段中的角色：\n{segment}\n"
+    if previous_summary:
+        prompt += f"\n前文摘要：{previous_summary}\n"
+    return prompt
+```
+
+##### 3.8.4 跨段合并策略
+
+分段处理完成后，使用全局角色表和场景图进行合并，确保 ID 统一：
+
+```python
+# core/merger.py
+def merge_segments(segment_results: list[SegmentResult]) -> Script:
+    """合并分段结果"""
+    # 1. 合并角色表（去重、别名合并）
+    global_characters = merge_characters([r.characters for r in segment_results])
+    
+    # 2. 合并场景（确保场景 ID 全局唯一）
+    global_scenes = []
+    for i, result in enumerate(segment_results):
+        for scene in result.scenes:
+            scene.id = f"scene_{i}_{scene.id}"
+            global_scenes.append(scene)
+    
+    # 3. 生成最终 Script
+    return Script(characters=global_characters, scenes=global_scenes)
+```
+
 #### 扩展点
 
 | 扩展方向 | 如何接入 | 改动范围 |
 |---------|---------|---------|
 | 新的分段策略 | 实现 `SegmentStrategy` Protocol | 仅新增文件 |
 | 动态阈值 | 从配置读取分段阈值 | 仅配置文件 |
+| 上下文窗口大小 | 从配置读取 | 仅配置文件 |
 
 ---
 
@@ -1371,7 +1451,6 @@ class SkillManager:
         self._config = config
         self._registry: dict[str, SkillMeta] = {}     # 已发现的 Skill
         self._loaded: dict[str, ModuleType] = {}       # 已加载的模块
-        self._enabled: set[str] = set()                # 已启用的 Skill
         self._hooks: dict[str, list[Callable]] = {     # 生命周期钩子
             "before_run": [], "after_run": [], "on_error": [],
         }
@@ -1383,10 +1462,6 @@ class SkillManager:
     # 执行
     async def execute(self, name: str, data: dict, config: dict) -> dict: ...
     async def execute_safe(self, name: str, data: dict, config: dict) -> SkillResult: ...
-
-    # 启用/禁用
-    def enable(self, name: str) -> None: ...
-    def disable(self, name: str) -> None: ...
 
     # 生命周期钩子
     def add_hook(self, event: str, callback: Callable) -> None: ...
@@ -1416,9 +1491,8 @@ skill_manager.add_hook("on_error", log_skill_error)
 
 | 方法 | 路径 | 功能 |
 |------|------|------|
-| GET | `/api/v1/skills` | 列出所有 Skill（含启用状态） |
+| GET | `/api/v1/skills` | 列出所有 Skill |
 | POST | `/api/v1/skills/run` | 执行指定 Skill |
-| POST | `/api/v1/skills/toggle` | 启用/禁用 Skill |
 | POST | `/api/v1/skills/create` | 创建用户 Skill 模板 |
 | POST | `/api/v1/skills/install` | 从路径安装 Skill |
 | DELETE | `/api/v1/skills/{name}` | 卸载用户 Skill |
@@ -1672,9 +1746,230 @@ async def process_segments_concurrently(
 
 ---
 
-## 11. 部署
+## 11. 超时机制
 
-### 11.1 安装方式
+### 11.1 设计目标
+
+1. **超长超时**：设置超长超时（1 小时），避免频繁超时
+2. **网络问题处理**：如果网络问题导致超时，继续等待，不立即报错
+3. **用户可手动取消**：用户提供取消按钮，可随时取消转换任务
+
+### 11.2 实现方案
+
+#### 11.2.1 超时配置
+
+```python
+# config.py
+class AppConfig(BaseSettings):
+    # 超时配置
+    timeout_total: int = 3600  # 总超时（秒），默认 1 小时
+    timeout_per_request: int = 300  # 单个 LLM 请求超时（秒），默认 5 分钟
+    max_retries: int = 3  # 失败重试次数
+```
+
+#### 11.2.2 超时处理逻辑
+
+```python
+# core/pipeline.py
+class Pipeline:
+    async def run(self, context: PipelineContext, callback: ProgressCallback | None = None) -> PipelineContext:
+        """执行 Pipeline，带超时处理"""
+        try:
+            # 设置总超时
+            async with asyncio.timeout(self.config.timeout_total):
+                for i, step_name in enumerate(self._step_order):
+                    step = self._steps[step_name]
+                    try:
+                        # 设置单个步骤超时
+                        async with asyncio.timeout(self.config.timeout_per_request):
+                            context = await step.run(context)
+                    except asyncio.TimeoutError:
+                        # 单个步骤超时，记录错误，继续下一个步骤（优雅降级）
+                        logger.error(f"步骤 '{step_name}' 超时")
+                        if callback:
+                            callback.on_error(step_name, "步骤超时")
+                        # 不中断 Pipeline，继续下一个步骤
+        except asyncio.TimeoutError:
+            # 总超时
+            logger.error("Pipeline 总超时")
+            raise PipelineTimeoutError("转换任务总超时，请检查网络连接或减小输入文本长度")
+```
+
+#### 11.2.3 用户取消机制
+
+```python
+# core/pipeline.py
+class Pipeline:
+    def __init__(self):
+        self._cancel_requested = False
+    
+    def cancel(self):
+        """取消转换任务"""
+        self._cancel_requested = True
+    
+    async def run(self, context: PipelineContext, callback: ProgressCallback | None = None) -> PipelineContext:
+        """执行 Pipeline，支持取消"""
+        for i, step_name in enumerate(self._step_order):
+            # 检查取消请求
+            if self._cancel_requested:
+                raise PipelineCancelledError("转换任务已取消")
+            
+            step = self._steps[step_name]
+            context = await step.run(context)
+        
+        return context
+```
+
+#### 11.2.4 前端取消按钮
+
+```javascript
+// web/js/editor.js
+function cancelConversion() {
+  fetch(`/api/v1/convert/${taskId}/cancel`, { method: "POST" })
+    .then(() => {
+      alert("转换任务已取消")
+    })
+}
+```
+
+### 11.3 扩展点
+
+| 扩展方向 | 如何接入 | 改动范围 |
+|---------|---------|---------|
+| 调整超时时间 | 修改配置文件 | 仅配置文件 |
+| 新增超时策略 | 扩展 `Pipeline` 类 | 仅 `pipeline.py` |
+| 超时后自动重试 | 在 `except asyncio.TimeoutError` 中添加重试逻辑 | 仅 `pipeline.py` |
+
+---
+
+## 12. 智能分章策略
+
+### 12.1 设计目标
+
+1. **支持多种章标题格式**：正则匹配常见章标题格式
+2. **无章标题处理**：如果文本没有章标题，整篇当作一个"全文"章处理
+3. **智能分章**：无章标题且文本≥6000字时，自动分割
+4. **用户可手动干预**：支持用户手动插入章节标记
+
+### 12.2 实现方案
+
+#### 12.2.1 章标题识别
+
+```python
+# core/chapter_splitter.py
+import re
+
+CHAPTER_PATTERNS = [
+    r"第[一二三四五六七八九十百千]+章",  # 第一章、第二章...
+    r"第[0123456789]+章",              # 第1章、第2章...
+    r"Chapter\s+[0-9]+",              # Chapter 1、Chapter 2...
+    r"PART\s+[0-9]+",                 # PART 1、PART 2...
+]
+
+def detect_chapters(text: str) -> list[Chapter]:
+    """识别章节结构"""
+    lines = text.split("\n")
+    chapters = []
+    current_chapter = None
+    
+    for i, line in enumerate(lines):
+        # 检查是否匹配章标题
+        if any(re.search(pattern, line) for pattern in CHAPTER_PATTERNS):
+            # 保存上一章
+            if current_chapter:
+                chapters.append(current_chapter)
+            # 开始新章
+            current_chapter = Chapter(title=line.strip(), paragraphs=[])
+        else:
+            # 添加到当前章
+            if current_chapter:
+                current_chapter.paragraphs.append(line)
+            else:
+                # 如果还没有章标题，创建"全文"章
+                current_chapter = Chapter(title="全文", paragraphs=[])
+                current_chapter.paragraphs.append(line)
+    
+    # 保存最后一章
+    if current_chapter:
+        chapters.append(current_chapter)
+    
+    return chapters
+```
+
+#### 12.2.2 无章标题自动分割
+
+```python
+# core/chapter_splitter.py
+def auto_split_chapters(text: str, threshold: int = 6000) -> list[Chapter]:
+    """无章标题时自动分割"""
+    if len(text) < threshold:
+        # 文本较短，整篇当作一章
+        return [Chapter(title="全文", paragraphs=text.split("\n"))]
+    
+    # 按空行分割
+    paragraphs = text.split("\n\n")
+    
+    chapters = []
+    current_chapter = []
+    current_length = 0
+    
+    for para in paragraphs:
+        if current_length + len(para) > threshold:
+            # 当前章已达到阈值，保存并开始新章
+            chapters.append(Chapter(
+                title=f"第{len(chapters)+1}章（自动分割）",
+                paragraphs=current_chapter
+            ))
+            current_chapter = []
+            current_length = 0
+        
+        current_chapter.append(para)
+        current_length += len(para)
+    
+    # 保存最后一章
+    if current_chapter:
+        chapters.append(Chapter(
+            title=f"第{len(chapters)+1}章（自动分割）",
+            paragraphs=current_chapter
+        ))
+    
+    return chapters
+```
+
+#### 12.2.3 用户手动插入章节标记
+
+```python
+# 用户可以在文本中插入以下标记：
+# --- Chapter X ---
+
+def parse_manual_chapters(text: str) -> list[Chapter]:
+    """解析手动插入的章节标记"""
+    pattern = r"---\s*Chapter\s+(\d+)\s*---"
+    parts = re.split(pattern, text)
+    
+    chapters = []
+    for i in range(1, len(parts), 2):
+        chapter_num = int(parts[i])
+        chapter_content = parts[i+1]
+        chapters.append(Chapter(
+            title=f"第{chapter_num}章",
+            paragraphs=chapter_content.split("\n")
+        ))
+    
+    return chapters
+```
+
+### 12.3 扩展点
+
+| 扩展方向 | 如何接入 | 改动范围 |
+|---------|---------|---------|
+| 支持新的章标题格式 | 在 `CHAPTER_PATTERNS` 中添加正则 | 仅 `chapter_splitter.py` |
+| 自定义分割策略 | 实现 `ChapterSplitStrategy` Protocol | 仅新增文件 |
+| 手动章节标记格式 | 扩展 `parse_manual_chapters` 函数 | 仅 `chapter_splitter.py` |
+
+---
+
+## 13. 部署
 
 **pip 安装**（开发者/高级用户）：
 
