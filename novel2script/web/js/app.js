@@ -12,10 +12,17 @@ function app() {
         progress: 0,              // 转换进度 0-100
         taskId: '',                // 当前转换任务 ID
         eventSource: null,         // SSE 连接
+        config: {                  // 配置
+            base_url: '',
+            api_key: '',
+            model_name: '',
+            temperature: 0.7,
+        },
 
         // ── 生命周期 ────────────────────
         init() {
             this.loadProjects();
+            this.loadConfig();
         },
 
         // ── 项目管理 ─────────────────────
@@ -24,7 +31,27 @@ function app() {
             const data = await res.json();
             if (data.code === 0) {
                 this.projects = data.data;
+                // 渲染项目列表
+                this.renderProjectList();
             }
+        },
+        
+        renderProjectList() {
+            const container = document.getElementById('project-list');
+            if (!container) return;
+            
+            container.innerHTML = this.projects.map(p => `
+                <div class="bg-white rounded-lg shadow-sm p-4 flex items-center justify-between">
+                    <div>
+                        <h3 class="font-medium">${p.name}</h3>
+                        <p class="text-sm text-gray-500">创建时间：${new Date(p.created_at).toLocaleString()}</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button @click="openProject('${p.id}')" class="btn">打开</button>
+                        <button @click="deleteProject('${p.id}')" class="btn text-red-600">删除</button>
+                    </div>
+                </div>
+            `).join('') || '<p class="text-gray-500">暂无项目，点击"新建项目"创建。</p>';
         },
 
         async createProject() {
@@ -55,6 +82,21 @@ function app() {
             if (!confirm('确认删除该项目？')) return;
             await fetch(`/api/v1/projects/${id}`, { method: 'DELETE' });
             await this.loadProjects();
+        },
+        
+        // ── 配置管理 ─────────────────────
+        async loadConfig() {
+            // 这里应该从后端加载配置，暂时使用 localStorage
+            const saved = localStorage.getItem('inkscript_config');
+            if (saved) {
+                this.config = JSON.parse(saved);
+            }
+        },
+        
+        async saveConfig() {
+            // 保存到 localStorage
+            localStorage.setItem('inkscript_config', JSON.stringify(this.config));
+            alert('配置已保存！');
         },
 
         // ── 编辑器 ─────────────────────

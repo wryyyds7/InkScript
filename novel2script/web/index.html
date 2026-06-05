@@ -34,12 +34,76 @@
 
         <!-- 编辑器 -->
         <template x-if="view === 'editor'">
-            <div id="editor-container"></div>
+            <div>
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-semibold" x-text="activeProject ? activeProject.name : '编辑器'"></h2>
+                    <div class="flex gap-2">
+                        <button @click="saveNovel()" class="btn-primary">保存小说</button>
+                        <button @click="startConvert()" class="btn-primary" :disabled="converting">开始转换</button>
+                        <button @click="saveScript()" class="btn-primary">保存剧本</button>
+                    </div>
+                </div>
+                
+                <!-- 进度条 -->
+                <template x-if="converting">
+                    <div class="mb-4">
+                        <div class="progress-bar">
+                            <div class="progress-fill" :style="`width: ${progress}%`"></div>
+                        </div>
+                        <p class="text-sm text-gray-600 mt-1">转换进度：<span x-text="progress"></span>%</p>
+                    </div>
+                </template>
+                
+                <!-- 双面板编辑器 -->
+                <div class="grid grid-cols-2 gap-4" style="height: calc(100vh - 200px);">
+                    <!-- 左侧：小说原文 -->
+                    <div class="flex flex-col">
+                        <h3 class="text-md font-medium mb-2">小说原文</h3>
+                        <textarea 
+                            x-model="novelText" 
+                            class="flex-1 w-full p-4 border rounded-lg font-mono text-sm"
+                            placeholder="在这里粘贴或输入小说原文..."
+                        ></textarea>
+                    </div>
+                    
+                    <!-- 右侧：剧本 YAML -->
+                    <div class="flex flex-col">
+                        <h3 class="text-md font-medium mb-2">剧本 YAML</h3>
+                        <textarea 
+                            x-model="scriptYaml" 
+                            class="flex-1 w-full p-4 border rounded-lg font-mono text-sm"
+                            placeholder="转换后的剧本 YAML 将显示在这里..."
+                        ></textarea>
+                    </div>
+                </div>
+            </div>
         </template>
 
         <!-- 设置 -->
         <template x-if="view === 'config'">
-            <div id="config-panel" class="max-w-lg mx-auto"></div>
+            <div class="max-w-lg mx-auto">
+                <h2 class="text-lg font-semibold mb-4">设置</h2>
+                <div class="bg-white rounded-lg shadow-sm p-6">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">API Base URL</label>
+                        <input type="text" x-model="config.base_url" class="w-full p-2 border rounded-lg">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">API Key</label>
+                        <input type="password" x-model="config.api_key" class="w-full p-2 border rounded-lg">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">模型名称</label>
+                        <input type="text" x-model="config.model_name" class="w-full p-2 border rounded-lg" placeholder="gpt-4">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">温度</label>
+                        <input type="range" x-model="config.temperature" min="0" max="2" step="0.1" class="w-full">
+                        <span x-text="config.temperature"></span>
+                    </div>
+                    <button @click="saveConfig()" class="btn-primary w-full">保存设置</button>
+                </div>
+            </div>
         </template>
     </main>
 
