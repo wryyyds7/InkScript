@@ -23,7 +23,7 @@ def get_store() -> FileSystemProjectStore:
     return FileSystemProjectStore(cfg.projects_dir)
 
 
-# ── 内存任务状态（V1 简化；V2 改用 Redis） ───
+# ── 内存任务状态（V1 简化;V2 改用 Redis） ───
 _task_status: dict[str, dict] = {}
 
 
@@ -75,7 +75,7 @@ def get_progress(
         for event in cached:
             yield event
 
-        # 2. 注册客户端，等待新事件
+        # 2. 注册客户端,等待新事件
         client_id = f"{task_id}_{int(time.time() * 1000)}"
         queue = await sse_manager.register_client(client_id, task_id)
 
@@ -84,7 +84,7 @@ def get_progress(
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=15.0)
                     yield event
-                    # 如果任务完成/失败，结束流
+                    # 如果任务完成/失败,结束流
                     if event.get("event") in ("task_complete", "task_failed"):
                         break
                 except asyncio.TimeoutError:
@@ -106,7 +106,7 @@ async def _run_pipeline(
     project_id: str,
     store: FileSystemProjectStore,
 ):
-    """后台执行 Pipeline，并通过 SSE 推送进度"""
+    """后台执行 Pipeline,并通过 SSE 推送进度"""
     from novel2script.llm_client import OpenAIClient
     from novel2script.core.pipeline import build_pipeline
     from novel2script.schema import Script
