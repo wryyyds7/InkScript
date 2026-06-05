@@ -23,6 +23,12 @@ import argparse
 from pathlib import Path
 from typing import Optional, Dict, Any
 
+# 修复 Windows 控制台编码问题
+if sys.platform == "win32":
+    import codecs
+    sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
+    sys.stderr = codecs.getwriter("utf-8")(sys.stderr.detach())
+
 # 项目根目录
 PROJECT_ROOT = Path(__file__).parent.parent
 DOCS_DIR = PROJECT_ROOT / "docs"
@@ -50,22 +56,22 @@ def print_header(text: str):
 
 def print_task(text: str):
     """打印任务"""
-    print(f"{Colors.CYAN}▶ {text}{Colors.ENDC}")
+    print(f"{Colors.CYAN}[TASK] {text}{Colors.ENDC}")
 
 
 def print_success(text: str):
     """打印成功信息"""
-    print(f"{Colors.GREEN}✓ {text}{Colors.ENDC}")
+    print(f"{Colors.GREEN}[SUCCESS] {text}{Colors.ENDC}")
 
 
 def print_warning(text: str):
     """打印警告信息"""
-    print(f"{Colors.YELLOW}⚠ {text}{Colors.ENDC}")
+    print(f"{Colors.YELLOW}[WARNING] {text}{Colors.ENDC}")
 
 
 def print_error(text: str):
     """打印错误信息"""
-    print(f"{Colors.RED}✗ {text}{Colors.ENDC}")
+    print(f"{Colors.RED}[ERROR] {text}{Colors.ENDC}")
 
 
 def ask_confirmation(prompt: str = "是否继续？") -> bool:
