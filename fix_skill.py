@@ -6,7 +6,7 @@ path = r"D:\bianchenglianxi\project\InkScript\docs\extensibility-design-spec.md"
 with open(path, "r", encoding="utf-8") as f:
     content = f.read()
 
-# 1. 在 SkillManager 类中补充 execute() 方法定义（放在 resolve_dependencies 之前）
+# 1. 在 SkillManager 类中补充 execute() 方法定义(放在 resolve_dependencies 之前)
 # 先找到 "class SkillManager:" 和第一个 async def 之间的位置
 pattern = r"(class SkillManager:.*?)(\n    async def resolve_dependencies)"
 flags = re.DOTALL
@@ -15,7 +15,7 @@ match = re.search(pattern, content)
 if match:
     insert_pos = match.start(2)  # 在 resolve_dependencies 之前插入
     new_execute = '''    async def execute(self, name: str, data: dict, config: dict) -> dict:
-        \"\"\"执行单个 Skill，根据 requires_llm 决定是否传递 llm_client\"\"\"
+        \"\"\"执行单个 Skill,根据 requires_llm 决定是否传递 llm_client\"\"\"
         meta = self._registry.get(name)
         if not meta:
             raise SkillNotFoundError(f"Skill '{name}' 未找到")
@@ -23,7 +23,7 @@ if match:
         # 处理 requires_llm 字段
         requires_llm = meta.get("requires_llm", True)
         if not requires_llm:
-            # 不需要 LLM 的 Skill，从 config 中移除 llm_client
+            # 不需要 LLM 的 Skill,从 config 中移除 llm_client
             config = {k: v for k, v in config.items() if k != "llm_client"}
 
         # 加载并调用 Skill
@@ -31,7 +31,7 @@ if match:
         return await module.run(data, config)
 
     async def execute_safe(self, name: str, data: dict, config: dict) -> SkillResult:
-        \"\"\"安全执行 Skill，异常不会传播到调用者\"\"\"
+        \"\"\"安全执行 Skill,异常不会传播到调用者\"\"\"
         start = time.monotonic()
         try:
             result = await self.execute(name, data, config)

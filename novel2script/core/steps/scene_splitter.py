@@ -1,6 +1,6 @@
 """场景分割 Step
 
-将小说文本按场景切换分割成独立场景。
+将小说文本按场景切换分割成独立场景.
 """
 
 from __future__ import annotations
@@ -12,11 +12,11 @@ from novel2script.llm_client import LLMClientProtocol
 from novel2script.schema import Script
 
 
-_SYSTEM_PROMPT = """你是一个专业的剧本场景分析师。
-将小说文本按场景切换（时间/地点变化）分割成独立场景，输出 JSON 数组。
+_SYSTEM_PROMPT = """你是一个专业的剧本场景分析师.
+将小说文本按场景切换(时间/地点变化)分割成独立场景,输出 JSON 数组.
 
-每个场景包含：
-- title: 场景标题（简短描述）
+每个场景包含:
+- title: 场景标题(简短描述)
 - location: 地点
 - time: 时间
 """
@@ -31,9 +31,9 @@ _USER_PROMPT_TPL = """## 小说文本
 
 ## 要求
 
-1. 按场景切换分割（地点/时间变化即为新场景）
-2. 每个场景编号自动分配（从 {start_id} 开始）
-3. 输出 JSON 数组，格式：
+1. 按场景切换分割(地点/时间变化即为新场景)
+2. 每个场景编号自动分配(从 {start_id} 开始)
+3. 输出 JSON 数组,格式:
 ```json
 [
   {{"title": "教室课间", "location": "教室", "time": "白天"}}
@@ -62,7 +62,7 @@ class SceneSplitterStep:
         ctx: dict,
     ) -> Script:
         characters = ctx.get("characters", [])
-        char_str = "、".join(characters) if characters else "（暂无）"
+        char_str = "、".join(characters) if characters else "(暂无)"
 
         # 简单按章节或双换行分段
         import re

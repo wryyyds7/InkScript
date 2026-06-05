@@ -1,13 +1,13 @@
 """API 集成测试
 
-使用 FastAPI 的 TestClient 测试所有 API 端点。
+使用 FastAPI 的 TestClient 测试所有 API 端点.
 """
 
-from fastapi.testclient import TestClient
+from starlette.testclient import TestClient
 from novel2script.api.main import create_app
 
-
-client = TestClient(create_app())
+# 使用 follow_redirects=True 以处理尾部斜杠重定向
+client = TestClient(create_app(), follow_redirects=True)
 
 
 class TestProjectAPI:

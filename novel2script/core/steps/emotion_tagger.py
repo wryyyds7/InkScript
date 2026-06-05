@@ -1,6 +1,6 @@
 """情绪标注 Step
 
-对已有 Beat 做情绪标注（补充 emotion 字段）。
+对已有 Beat 做情绪标注(补充 emotion 字段).
 """
 
 from __future__ import annotations
@@ -12,12 +12,12 @@ from novel2script.llm_client import LLMClientProtocol
 from novel2script.schema import DialogueBeat, Script
 
 
-_SYSTEM_PROMPT = """你是一个专业的剧本情绪分析 师。
-对给定的对白内容，标注说话者的情绪。
+_SYSTEM_PROMPT = """你是一个专业的剧本情绪分析 师.
+对给定的对白内容,标注说话者的情绪.
 
-情绪类别（可选）：
+情绪类别(可选):
 happy / sad / angry / calm / excited / scared / surprised / sad
-如果无法确定，返回 null。
+如果无法确定,返回 null.
 """
 
 _USER_PROMPT_TPL = """## 对白内容
@@ -30,7 +30,7 @@ _USER_PROMPT_TPL = """## 对白内容
 
 ## 要求
 
-只输出一个 JSON 对象：{{"emotion": "happy"}} 或 {{"emotion": null}}
+只输出一个 JSON 对象:{{"emotion": "happy"}} 或 {{"emotion": null}}
 """
 
 

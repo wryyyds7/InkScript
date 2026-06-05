@@ -1,6 +1,6 @@
 """角色识别 Step
 
-从小说文本中提取所有角色信息。
+从小说文本中提取所有角色信息.
 """
 
 from __future__ import annotations
@@ -13,15 +13,15 @@ from novel2script.llm_client import LLMClientProtocol
 from novel2script.schema import Character, Script
 
 
-_SYSTEM_PROMPT = """你是一个专业的剧本角色分析师。
-从小说文本中识别所有有对白的角色，输出 JSON 数组。
+_SYSTEM_PROMPT = """你是一个专业的剧本角色分析师.
+从小说文本中识别所有有对白的角色,输出 JSON 数组.
 
-每个角色包含：
-- name: 角色名称（必需）
-- aliases: 别名列表（可选）
-- description: 简短描述（可选）
+每个角色包含:
+- name: 角色名称(必需)
+- aliases: 别名列表(可选)
+- description: 简短描述(可选)
 
-只输出 JSON，不要输出其他内容。
+只输出 JSON,不要输出其他内容.
 """
 
 _USER_PROMPT_TPL = """## 小说文本
@@ -30,12 +30,12 @@ _USER_PROMPT_TPL = """## 小说文本
 
 ## 要求
 
-1. 识别所有有对白的角色（至少说过一句话）
-2. 合并同一角色的不同称呼（放入 aliases）
-3. 输出 JSON 数组，格式：
+1. 识别所有有对白的角色(至少说过一句话)
+2. 合并同一角色的不同称呼(放入 aliases)
+3. 输出 JSON 数组,格式:
 ```json
 [
-  {{"name": "李雷", "aliases": ["小李", "雷子"], "description": "男主角，高中生"}}
+  {{"name": "李雷", "aliases": ["小李", "雷子"], "description": "男主角,高中生"}}
 ]
 ```
 """
@@ -60,7 +60,7 @@ class CharacterExtractorStep:
         llm: LLMClientProtocol,
         ctx: dict,
     ) -> Script:
-        # 分段处理（防止超 Token）
+        # 分段处理(防止超 Token)
         max_chars = 20_000
         segments = [
             novel_text[i : i + max_chars]

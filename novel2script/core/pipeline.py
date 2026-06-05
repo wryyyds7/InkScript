@@ -1,7 +1,7 @@
 """Pipeline 核心编排 + Hook 机制
 
-负责按顺序执行 Step，并在每个 Step 前后
-触发 Hook（用于 Skill 注入、日志、进度推送等）。
+负责按顺序执行 Step,并在每个 Step 前后
+触发 Hook(用于 Skill 注入、日志、进度推送等).
 """
 
 from __future__ import annotations
@@ -15,15 +15,14 @@ from novel2script.schema import Script
 
 # ── Hook 类型定义 ─────────────────────────────────────
 HookFn = Callable[["Pipeline", str, dict[str, Any]], None]
-"""Hook 函数签名：
-    pipeline -> step_name -> ctx -> None
-"""
+"""Hook 函数签名:
+    pipeline -> step_name -> ctx -> None, """
 
 
 class Pipeline:
     """Pipeline 编排器
 
-    按顺序执行 Step 列表，支持：
+    按顺序执行 Step 列表,支持:
     - before_step / after_step Hook
     - ctx 在 Step 之间共享
     - 错误中断
@@ -50,7 +49,7 @@ class Pipeline:
         self._after_hooks.append(fn)
 
     def clear_hooks(self) -> None:
-        """清除所有 Hook（主要用于测试）"""
+        """清除所有 Hook(主要用于测试)"""
         self._before_hooks.clear()
         self._after_hooks.clear()
 
@@ -98,7 +97,7 @@ class Pipeline:
                 )
             except Exception as exc:
                 raise RuntimeError(
-                    f"Step [{step.name}] 执行失败：{exc}"
+                    f"Step [{step.name}] 执行失败:{exc}"
                 ) from exc
 
             # after hooks
@@ -108,10 +107,10 @@ class Pipeline:
         return current
 
     async def run_async(self, script: Script, novel_text: str) -> Script:
-        """异步执行 Pipeline（SSE 进度推送用）
+        """异步执行 Pipeline(SSE 进度推送用)
 
-        Step.run 仍是同步的（LLM 调用可异步），
-        此处用 asyncio.to_thread 包装以释放事件循环。
+        Step.run 仍是同步的(LLM 调用可异步),
+        此处用 asyncio.to_thread 包装以释放事件循环.
         """
         import asyncio
 
@@ -119,7 +118,7 @@ class Pipeline:
 
 
 # ─────────────────────────────────────────────
-# 工厂函数：根据 Step 名称列表构建 Pipeline
+# 工厂函数:根据 Step 名称列表构建 Pipeline
 # ─────────────────────────────────────────────
 def build_pipeline(
     step_names: list[str] | None = None,
@@ -128,9 +127,9 @@ def build_pipeline(
     """根据注册的 Step 类构建 Pipeline
 
     Args:
-        step_names: Step 名称列表（按顺序）；
-                   为 None 时使用默认 Pipeline。
-        llm: LLM 客户端实例。
+        step_names: Step 名称列表(按顺序);
+                   为 None 时使用默认 Pipeline.
+        llm: LLM 客户端实例.
     """
     from novel2script.core.steps.base import STEP_REGISTRY
 
@@ -145,7 +144,7 @@ def build_pipeline(
 
     missing = [n for n in step_names if n not in STEP_REGISTRY]
     if missing:
-        raise KeyError(f"以下 Step 未注册：{missing}")
+        raise KeyError(f"以下 Step 未注册:{missing}")
 
     pipeline = Pipeline(llm=llm)
     for name in step_names:

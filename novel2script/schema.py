@@ -1,7 +1,7 @@
-"""Pydantic 数据模型（Tagged Union Beat）
+"""Pydantic 数据模型(Tagged Union Beat)
 
-定义剧本 YAML 的 Python 表示，
-使用 Pydantic V2 做类型校验和序列化。
+定义剧本 YAML 的 Python 表示,
+使用 Pydantic V2 做类型校验和序列化.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field, model_validator
 
 
 # ─────────────────────────────────────────────
-# BeatType：Beat 类型枚举（字符串字面量）
+# BeatType:Beat 类型枚举(字符串字面量)
 # ─────────────────────────────────────────────
 class BeatType:
     DIALOGUE = "dialogue"
@@ -22,33 +22,33 @@ class BeatType:
 
 
 # ─────────────────────────────────────────────
-# 基础 Beat（内部使用，不直接暴露）
+# 基础 Beat(内部使用,不直接暴露)
 # ─────────────────────────────────────────────
 class BaseBeat(BaseModel):
-    """所有 Beat 的基类（不直接使用）"""
+    """所有 Beat 的基类(不直接使用)"""
 
     model_config = {"extra": "forbid"}
 
     source_location: dict[str, Any] | None = Field(
         None,
-        description="原文定位：{chapter, paragraph, sentence}",
+        description="原文定位:{chapter, paragraph, sentence}",
     )
 
 
 # ─────────────────────────────────────────────
-# 3 种 Beat（Tagged Union 成员）
+# 3 种 Beat(Tagged Union 成员)
 # ─────────────────────────────────────────────
 class DialogueBeat(BaseBeat):
-    """对白 Beat：角色说话内容"""
+    """对白 Beat:角色说话内容"""
 
     type: Literal[BeatType.DIALOGUE] = BeatType.DIALOGUE
-    character: str = Field(..., description="角色名称，必须存在于角色列表中")
+    character: str = Field(..., description="角色名称,必须存在于角色列表中")
     content: str = Field(..., description="对白内容")
-    emotion: str | None = Field(None, description="情绪标签（可选）")
+    emotion: str | None = Field(None, description="情绪标签(可选)")
 
-    # V1 扩展字段（可选）
-    volume: str | None = Field(None, description="音量：whisper | normal | shout")
-    speed: str | None = Field(None, description="语速：slow | normal | fast")
+    # V1 扩展字段(可选)
+    volume: str | None = Field(None, description="音量:whisper | normal | shout")
+    speed: str | None = Field(None, description="语速:slow | normal | fast")
 
     # 自动设置 type 默认值
     @model_validator(mode="before")
@@ -60,11 +60,11 @@ class DialogueBeat(BaseBeat):
 
 
 class ActionBeat(BaseBeat):
-    """动作 Beat：描述动作、表情、场景变化"""
+    """动作 Beat:描述动作、表情、场景变化"""
 
     type: Literal[BeatType.ACTION] = BeatType.ACTION
     content: str = Field(..., description="动作描述")
-    duration: float | None = Field(None, description="预估持续时间（秒）")
+    duration: float | None = Field(None, description="预估持续时间(秒)")
 
     @model_validator(mode="before")
     @classmethod
@@ -75,11 +75,11 @@ class ActionBeat(BaseBeat):
 
 
 class NarrationBeat(BaseBeat):
-    """旁白 Beat：描述场景、氛围、心理活动"""
+    """旁白 Beat:描述场景、氛围、心理活动"""
 
     type: Literal[BeatType.NARRATION] = BeatType.NARRATION
     content: str = Field(..., description="旁白内容")
-    speaker: str | None = Field(None, description="旁白配音角色（可选）")
+    speaker: str | None = Field(None, description="旁白配音角色(可选)")
 
     @model_validator(mode="before")
     @classmethod
@@ -90,7 +90,7 @@ class NarrationBeat(BaseBeat):
 
 
 # ─────────────────────────────────────────────
-# Beat Union（Tagged Union，YAML 靠 `type` 字段分发）
+# Beat Union(Tagged Union,YAML 靠 `type` 字段分发)
 # ─────────────────────────────────────────────
 Beat = Union[DialogueBeat, ActionBeat, NarrationBeat]
 
@@ -106,7 +106,7 @@ class Character(BaseModel):
     name: str = Field(..., description="角色名称")
     aliases: list[str] = Field(default_factory=list, description="别名列表")
     description: str = Field("", description="角色描述")
-    voice_profile: str | None = Field(None, description="声音配置（TTS 用）")
+    voice_profile: str | None = Field(None, description="声音配置(TTS 用)")
 
 
 # ─────────────────────────────────────────────
@@ -117,7 +117,7 @@ class Scene(BaseModel):
 
     model_config = {"extra": "ignore"}
 
-    scene_id: int = Field(..., description="场景编号（从 1 开始）")
+    scene_id: int = Field(..., description="场景编号(从 1 开始)")
     title: str = Field("", description="场景标题")
     location: str = Field("", description="场景地点")
     time: str = Field("", description="场景时间")
@@ -128,9 +128,9 @@ class Scene(BaseModel):
 # 剧本元数据
 # ─────────────────────────────────────────────
 class ScriptMeta(BaseModel):
-    """剧本元数据（向前兼容：extra=ignore）"""
+    """剧本元数据(向前兼容:extra=ignore)"""
 
-    model_config = {"extra": "ignore"}
+    model_config = {"extra": "ignore", "protected_namespaces": ()}
 
     version: str = "1.0"
     generated_at: datetime = Field(default_factory=datetime.utcnow)
@@ -143,7 +143,7 @@ class ScriptMeta(BaseModel):
     action_count: int = 0
     narration_count: int = 0
 
-    # 角色列表（去重）
+    # 角色列表(去重)
     characters: list[str] = Field(default_factory=list)
 
 
@@ -151,7 +151,7 @@ class ScriptMeta(BaseModel):
 # 完整剧本
 # ─────────────────────────────────────────────
 class Script(BaseModel):
-    """完整剧本（YAML 根对象）"""
+    """完整剧本(YAML 根对象)"""
 
     model_config = {"extra": "ignore"}
 
@@ -183,7 +183,7 @@ def to_yaml(script: Script) -> str:
     """将 Script 序列化为 YAML 字符串"""
     import yaml
 
-    # 自定义表示：让 type 字段排在最前面
+    # 自定义表示:让 type 字段排在最前面
     class _TaggedDumper(yaml.SafeDumper):
         pass
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from novel2script.core.project_store import FileSystemProjectStore
@@ -13,13 +13,14 @@ from novel2script.config import get_config
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
+
 # ── 依赖注入 ─────────────────────────────────────
 def get_store() -> FileSystemProjectStore:
     cfg = get_config()
     return FileSystemProjectStore(cfg.projects_dir)
 
 
-# ── 请求/响应模型 ─────────────────────────────────
+# ── 请求/响应模型 ────────────────────────────────
 class ProjectCreateReq(BaseModel):
     name: str
 
@@ -29,33 +30,22 @@ class ProjectUpdateReq(BaseModel):
 
 
 # ── 路由 ──────────────────────────────────────────
-@router.get("/")
+@router.get("", name="list_projects")
 def list_projects(store: FileSystemProjectStore = Depends(get_store)):
     """获取项目列表"""
     return {"code": 0, "data": store.list_projects()}
 
 
-@router.post("/")
+@router.post("", name="create_project")
 def create_project(
     body: ProjectCreateReq,
     store: FileSystemProjectStore = Depends(get_store),
 ):
     """创建项目"""
-    import uuid
-    project_id = f"proj_{uuid.uuid4().hex[:8]}"
-    meta = {
-        "id": project_id,
-        "name": body.name,
-        "created_at": __import__("datetime").datetime.utcnow().isoformat(),
-        "updated_at": __import__("datetime").datetime.utcnow().isoformat(),
-        "status": "draft",
-    }
-    proj_dir = store._project_path(project_id)
-    proj_dir.mkdir(parents=True, exist_ok=True)
     import json
-    (proj_dir / "meta.json").write_text(
-        json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    from datetime import datetime
+
+    meta = store.create_project(body.name, "")
     return {"code": 0, "data": meta}
 
 
@@ -78,13 +68,14 @@ def update_project(
     store: FileSystemProjectStore = Depends(get_store),
 ):
     """更新项目（仅 name）"""
+    import json
+    from datetime import datetime
+
     meta = store.get_project(project_id)
     if not meta:
         raise HTTPException(status_code=404, detail="项目不存在")
     if body.name is not None:
         meta["name"] = body.name
-    import json
-    from datetime import datetime
     meta["updated_at"] = datetime.utcnow().isoformat()
     store._meta_path(project_id).write_text(
         json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"

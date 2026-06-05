@@ -1,4 +1,4 @@
-"""转换任务 API 路由（含 SSE 进度推送）"""
+"""转换任务 API 路由(含 SSE 进度推送)"""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ def get_store() -> FileSystemProjectStore:
     return FileSystemProjectStore(cfg.projects_dir)
 
 
-# ── 内存任务状态（V1 简化;V2 改用 Redis） ───
+# ── 内存任务状态(V1 简化;V2 改用 Redis) ───
 _task_status: dict[str, dict] = {}
 
 
@@ -46,7 +46,7 @@ def start_convert(
         "percent": 0.0,
     }
 
-    # 异步执行（后台）
+    # 异步执行(后台)
     asyncio.create_task(_run_pipeline(task_id, project_id, store))
 
     return {
@@ -64,9 +64,9 @@ def get_progress(
     task_id: str,
     last_event_ts: float = 0.0,
 ):
-    """SSE 端点：获取转换进度
+    """SSE 端点:获取转换进度
 
-    last_event_ts：客户端上次收到事件的时间戳（用于重连补全）
+    last_event_ts:客户端上次收到事件的时间戳(用于重连补全)
     """
 
     async def event_generator():
@@ -138,7 +138,7 @@ async def _run_pipeline(
                 },
             )
 
-        # 简化：直接同步执行（V1 不拆 async step）
+        # 简化:直接同步执行(V1 不拆 async step)
         result_script = pipeline.run(script, novel_text)
 
         # 保存结果

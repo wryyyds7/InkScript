@@ -1,7 +1,7 @@
 """ProjectStore Protocol + FileSystemProjectStore 实现
 
-定义项目持久化接口（Protocol），
-默认提供基于文件系统的实现。
+定义项目持久化接口(Protocol),
+默认提供基于文件系统的实现.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from novel2script.config import get_config
 
 @runtime_checkable
 class ProjectStore(Protocol):
-    """项目持久化接口（可替换实现）"""
+    """项目持久化接口(可替换实现)"""
 
     def list_projects(self) -> list[dict]: ...
     def get_project(self, project_id: str) -> dict | None: ...
@@ -30,7 +30,7 @@ class ProjectStore(Protocol):
 
 
 class FileSystemProjectStore:
-    """基于文件系统的 ProjectStore 实现（V1 默认）"""
+    """基于文件系统的 ProjectStore 实现(V1 默认)"""
 
     def __init__(self, base_dir: Path | None = None):
         self.base_dir = base_dir or get_config().projects_dir
@@ -96,7 +96,7 @@ class FileSystemProjectStore:
     def update_project(self, project_id: str, **kwargs) -> dict:
         meta = self.get_project(project_id)
         if not meta:
-            raise FileNotFoundError(f"项目不存在：{project_id}")
+            raise FileNotFoundError(f"项目不存在:{project_id}")
         meta.update(kwargs)
         meta["updated_at"] = datetime.now().isoformat()
         self._meta_path(project_id).write_text(

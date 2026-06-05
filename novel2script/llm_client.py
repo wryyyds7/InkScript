@@ -1,6 +1,6 @@
-"""LLM 客户端封装（LLMClientProtocol）
+"""LLM 客户端封装(LLMClientProtocol)
 
-统一 LLM 调用接口，支持重试、超时、错误处理。
+统一 LLM 调用接口,支持重试、超时、错误处理.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from novel2script.config import get_config
 
 @runtime_checkable
 class LLMClientProtocol(Protocol):
-    """LLM 客户端接口（可替换为 Mock / 其他实现）"""
+    """LLM 客户端接口(可替换为 Mock / 其他实现)"""
 
     def chat(
         self,
@@ -90,14 +90,14 @@ class OpenAIClient:
         constrained_messages = list(messages)
         if constrained_messages and constrained_messages[0]["role"] == "system":
             constrained_messages[0]["content"] += (
-                f"\n\n你必须严格按照以下 JSON Schema 返回 JSON：\n{schema_str}"
+                f"\n\n你必须严格按照以下 JSON Schema 返回 JSON:\n{schema_str}"
             )
         else:
             constrained_messages.insert(
                 0,
                 {
                     "role": "system",
-                    "content": f"你必须严格按照以下 JSON Schema 返回 JSON：\n{schema_str}",
+                    "content": f"你必须严格按照以下 JSON Schema 返回 JSON:\n{schema_str}",
                 },
             )
 
@@ -108,7 +108,7 @@ class OpenAIClient:
             max_tokens=max_tokens,
         )
 
-        # 尝试提取 JSON（防止 LLM 返回 markdown 代码块）
+        # 尝试提取 JSON(防止 LLM 返回 markdown 代码块)
         text = raw.strip()
         if text.startswith("```"):
             text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
@@ -116,5 +116,5 @@ class OpenAIClient:
 
 
 def get_llm_client() -> OpenAIClient:
-    """工厂函数：获取 LLM 客户端实例"""
+    """工厂函数:获取 LLM 客户端实例"""
     return OpenAIClient()

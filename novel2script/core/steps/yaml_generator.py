@@ -1,6 +1,6 @@
 """YAML 生成 Step
 
-将 Script 对象序列化为 YAML 字符串并写回 Script.meta。
+将 Script 对象序列化为 YAML 字符串并写回 Script.meta.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from novel2script.schema import Script, to_yaml
 
 @register_step("yaml_generator")
 class YamlGeneratorStep:
-    """YAML 生成 Step（最终步骤）"""
+    """YAML 生成 Step(最终步骤)"""
 
     @property
     def name(self) -> str:
@@ -36,7 +36,7 @@ class YamlGeneratorStep:
         # to_yaml() 已在 schema.py 中实现
         yaml_str = to_yaml(script)
 
-        # 存入 ctx 供后续（SSE / 下载）使用
+        # 存入 ctx 供后续(SSE / 下载)使用
         ctx["yaml_output"] = yaml_str
 
         # 标记完成

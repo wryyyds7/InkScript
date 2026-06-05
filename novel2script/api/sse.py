@@ -1,7 +1,7 @@
 """SSE 事件推送管理
 
-实现 SSE 事件缓存和客户端管理，
-防止网络中断丢失事件。
+实现 SSE 事件缓存和客户端管理,
+防止网络中断丢失事件.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 
 
 class SSEManager:
-    """SSE 事件管理器（含事件缓存）"""
+    """SSE 事件管理器(含事件缓存)"""
 
     def __init__(self, max_cache_size: int = 100):
         self.clients: Dict[str, asyncio.Queue] = {}
@@ -22,7 +22,7 @@ class SSEManager:
         self._lock = asyncio.Lock()
 
     async def push_event(self, task_id: str, event: dict) -> None:
-        """推送事件给所有订阅该任务的客户端，并缓存"""
+        """推送事件给所有订阅该任务的客户端,并缓存"""
         cached_event = {
             "task_id": task_id,
             "event": event,
@@ -49,7 +49,7 @@ class SSEManager:
         return events
 
     async def register_client(self, client_id: str, task_id: str) -> asyncio.Queue:
-        """注册客户端，返回事件队列"""
+        """注册客户端,返回事件队列"""
         queue: asyncio.Queue = asyncio.Queue(maxsize=200)
         self.clients[client_id] = queue
         return queue

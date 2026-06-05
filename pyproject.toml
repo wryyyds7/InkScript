@@ -46,7 +46,7 @@ python_files = ["test_*.py", "*_test.py"]
 
 [tool.pyright]
 pythonVersion = "3.10"
-include = ["src", "tests"]
+include = ["novel2script", "tests"]
 strict = true
 
 [tool.ruff]
