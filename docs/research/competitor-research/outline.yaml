@@ -1,0 +1,63 @@
+# 同类产品调研大纲 - Novel2Script
+# 调研目标：了解 Final Draft、WriterDuet、Celtx 等竞品的
+# 1. 核心功能对比
+# 2. 技术架构（桌面端实现方式）
+# 3. 用户体验亮点与不足
+# 4. AI 能力集成情况
+# 5. 定价策略
+# 6. 对 Novel2Script 的启发
+
+items:
+  - id: final_draft
+    name: Final Draft
+    description: 业界标准剧本写作软件，考察其功能架构、技术实现、AI集成情况
+    priority: high
+    search_queries:
+      - "Final Draft 剧本写作软件 功能介绍 2024 2025"
+      - "Final Draft software features review 2024 2025"
+      - "Final Draft AI feature integration ChatGPT"
+      - "Final Draft 技术架构 桌面应用 实现方式"
+
+  - id: writerduet
+    name: WriterDuet
+    description: 实时协作剧本写作工具，考察协作功能、技术栈、AI能力
+    priority: high
+    search_queries:
+      - "WriterDuet 剧本写作 实时协作 功能介绍"
+      - "WriterDuet vs Final Draft comparison 2024"
+      - "WriterDuet AI features script writing"
+      - "WriterDuet 技术架构 web based"
+
+  - id: celtx
+    name: Celtx
+    description: 全流程预制作工具，考察其剧本写作、项目管理、AI集成
+    priority: medium
+    search_queries:
+      - "Celtx 剧本写作软件 功能 定价 2024"
+      - "Celtx vs Final Draft comparison"
+      - "Celtx AI script generation features"
+
+  - id: ai_script_tools
+    name: AI剧本生成工具（通用）
+    description: 考察现有AI剧本生成工具的能力边界，寻找差异化机会
+    priority: high
+    search_queries:
+      - "AI script writing tools 2024 2025 ChatGPT Claude"
+      - "AI 剧本生成工具 小说转剧本 2024"
+      - "automatic novel to script conversion AI tool"
+      - "best AI screenplay generator 2025"
+
+  - id: open_source_tools
+    name: 开源剧本写作工具
+    description: 考察开源替代方案，寻找可借鉴的技术实现
+    priority: medium
+    search_queries:
+      - "open source screenplay writing software"
+      - "open source novel to script conversion tool"
+      - "Python natural language processing screenplay generation"
+
+config:
+  language: zh-CN
+  max_results_per_query: 5
+  search_depth: deep
+  output_format: markdown

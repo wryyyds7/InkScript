@@ -591,12 +591,19 @@ class AppConfig(BaseSettings):
 | `step_progress` | 步骤内进度更新 | `{step, detail, percent}` |
 | `step_complete` | 步骤完成 | `{step, result_summary}` |
 | `step_error` | 步骤出错 | `{step, error}` |
+| `heartbeat` | 每 15 秒发送一次（防止连接中断） | `{"ts": <timestamp>}` |
 | `task_complete` | 任务完成 | `{result}` |
 | `task_failed` | 任务失败 | `{error}` |
+| `task_cancelled` | 任务被取消 | `{reason}` |
 | `skill_start` | Skill 开始执行 | `{skill_name}` |
 | `skill_complete` | Skill 执行完成 | `{skill_name, result}` |
 | `skill_error` | Skill 执行出错 | `{skill_name, error}` |
 | `project_saved` | 项目保存成功 | `{project_id, file_type}` |
+
+**心跳机制**（质询修复 #6）：SSE 连接默认可能被代理/负载均衡在 30-120 秒无数据后断开。解决方案：
+1. 在 `sse.py` 的推送循环中，如果距离上次推送超过 15 秒，自动发送 `heartbeat` 事件
+2. 前端 `EventSource` 监听 `heartbeat` 事件，收到后更新本地时间戳
+3. 前端实现自动重连：如果 60 秒未收到任何事件（含 heartbeat），主动重连 SSE 流
 
 #### 扩展点
 
@@ -804,14 +811,17 @@ class Pipeline:
         self._skip_steps = set(skip)
 
     async def run(self, context: PipelineContext, callback: ProgressCallback | None = None) -> PipelineContext:
-        """执行 Pipeline"""
+        """执行 Pipeline，支持取消检查"""
         await self._fire_hook("before_convert", context)
+        self._check_cancel()  # ← 取消检查点 1
 
         for i, step_name in enumerate(self._step_order):
+            self._check_cancel()  # ← 取消检查点 2（每个步骤前）
             step = self._steps[step_name]
             if callback:
                 callback.on_step_start(step_name, len(self._step_order), i + 1)
             context = await step.run(context)
+            self._check_cancel()  # ← 取消检查点 3（步骤完成后）
             # 使用 _fire_hook 的返回值，允许 Hook 修改上下文
             context = await self._fire_hook("after_step", context, step_name=step_name)
             if callback:
@@ -821,6 +831,11 @@ class Pipeline:
 
         await self._fire_hook("after_convert", context)
         return context
+
+    def _check_cancel(self):
+        """检查取消请求，如果已请求取消则抛出异常"""
+        if self._cancel_requested:
+            raise PipelineCancelledError("转换已被用户取消")
 
     async def run_chapters(self, chapter_indices: list[int], context: PipelineContext) -> PipelineContext:
         """增量转换：只处理指定章节"""
@@ -994,7 +1009,38 @@ beats:
     source_location: { chapter: 1, start: 42, end: 48 }  # ← 映射锚点
 ```
 
-**联动流程**：
+**⚠️ 质询修复 #8：`source_location` 失效问题**
+
+如果用户在左侧编辑器修改了小说原文（增删文字），所有 `source_location.start/end` 都会发生偏移，导致滚动联动功能失效甚至定位到错误位置。
+
+**解决方案（V1）**：
+1. **存储上下文锚点而非绝对位置**：除了 `start/end`，额外存储 `context_before: str`（定位位置前 20 个字符）和 `context_after: str`（定位位置后 20 个字符）
+2. **联动时做模糊匹配**：不再直接用 `scrollTo(start)`，而是：
+   - 先尝试精确匹配 `context_before + context_after`
+   - 匹配失败则做模糊匹配（允许 10% 字符差异）
+   - 仍失败则定位到对应章节开头
+3. **编辑原文后标记映射状态**：当小说原文保存时，在 YAML 编辑器中显示⚠️ 提示"原文已修改，位置映射可能不准确"
+
+```yaml
+# V1 增强后的 source_location
+beats:
+  - type: dialogue
+    character: "李明"
+    content: "你好"
+    emotion: "友善"
+    source_location:
+      chapter: 1
+      start: 42
+      end: 48
+      context_before: "夜色渐深，"   # ← 新增：定位上下文
+      context_after: "他抬起头"      # ← 新增：定位上下文
+```
+
+**V2 方案（根本解决）**：
+- 实现"同步编辑"模式：修改小说原文时，同步更新 `source_location`（需要 LLM 辅助重新定位，成本高，设为 V2 功能）
+- 或在 YAML 编辑器中禁止直接编辑小说原文，只通过"同步编辑"模式修改
+
+**联动流程（V1 增强版）**：
 
 ```
 用户点击右侧 Beat
@@ -1003,10 +1049,15 @@ beats:
 读取 Beat.source_location
     │
     ▼
-左侧编辑器 scrollTo(source_location.start)
+尝试精确匹配 context_before + context_after
     │
-    ▼
-高亮左侧对应文本段
+    ├── 匹配成功 → scrollTo(匹配位置)
+    │
+    └── 匹配失败 → 模糊匹配（允许 10% 差异）
+                    │
+                    ├── 模糊匹配成功 → scrollTo(模糊位置)，显示⚠️ 提示
+                    │
+                    └── 仍失败 → scrollTo(章节开头)，显示⚠️ 提示
 ```
 
 ### 5.4 Beat 内联编辑
@@ -1734,12 +1785,14 @@ run_fn = module.run  # 获取入口函数
     ↓ 覆盖
 全局配置文件（~/.novel2script/config.json）
     ↓ 覆盖
-项目配置快照（config_snapshot.json）
-    ↓ 覆盖
 环境变量（N2S_ 前缀）
+    ↓ 覆盖
+项目配置快照（config_snapshot.json）  ← 确保项目复现性
     ↓ 覆盖
 运行时参数（CLI --option / API 请求体）
 ```
+
+**设计理由**：项目配置快照记录项目创建时的确切配置，确保转换结果可复现。它应该能被运行时参数覆盖（用户主动修改），但不应该被环境变量静默覆盖。
 
 **冲突处理策略**：高优先级覆盖低优先级。例如：
 - 如果配置文件中设置了 `model_name = "gpt-4o-mini"`，
@@ -1899,11 +1952,11 @@ pip install cryptography keyring
 
 ## 9. 错误处理
 
-### 9.1 错误分类
+### 9.1 错误分类与处理策略
 
 | 错误类型 | 示例 | 处理策略 |
 |---------|------|---------|
-| **LLM 输出格式错误** | JSON 解析失败、字段缺失 | 自动修复 → 降级重试 → 标记 `[PARSE_ERROR]` |
+| **LLM 输出格式错误** | JSON 解析失败、字段缺失 | 自动修复（提取代码块→修复常见JSON错误）→ 降级重试 → 标记 `[PARSE_ERROR]` |
 | **LLM API 错误** | 401 Key 无效、429 限速、500 服务端错误 | 429 限速退避重试；401/403 直接报错 |
 | **网络错误** | 连接超时、DNS 解析失败 | 重试 3 次，指数退避 |
 | **文件错误** | 文件不存在、编码不支持 | 前端校验 + 后端校验，提前报错 |
@@ -1911,6 +1964,45 @@ pip install cryptography keyring
 | **Skill 错误** | 加载失败、执行异常、输出格式不对 | 隔离 Skill 错误，不影响核心 Pipeline |
 | **项目错误** | 项目不存在、ID 无效 | 404 响应 |
 | **系统错误** | 内存不足、磁盘满 | 直接报错，记录日志 |
+
+#### 9.1.1 LLM 输出格式错误自动修复策略（质询修复 #9）
+
+**自动修复的具体规则**（按优先级依次尝试）：
+
+```python
+def auto_fix_llm_output(raw: str, schema: type[BaseModel]) -> dict | None:
+    """尝试自动修复 LLM 输出格式错误"""
+    
+    # 策略 1：提取 <json>...</json> 或 ```json ... ``` 代码块
+    code_block = extract_code_block(raw)
+    if code_block:
+        try:
+            return json.loads(code_block)
+        except json.JSONDecodeError:
+            pass  # 继续尝试其他策略
+    
+    # 策略 2：修复常见 JSON 错误
+    fixed = raw
+    fixed = fixed.replace("'", "\"")          # 单引号 → 双引号
+    fixed = re.sub(r",\s*}", "}", fixed)   # 去掉尾逗号
+    fixed = re.sub(r",\s*\]", "]", fixed)   # 去掉数组中尾逗号
+    fixed = fixed.replace("\n", "\\n")         # 未转义换行
+    try:
+        return json.loads(fixed)
+    except json.JSONDecodeError:
+        pass
+    
+    # 策略 3：让 LLM 自己修复（附加修正 Prompt）
+    # 由调用方处理：将原始输出和错误信息传给 LLM，要求重新输出纯 JSON
+    return None  # 返回 None 表示需要降级重试
+```
+
+**降级重试 Prompt**（策略 3 的 Prompt 设计）：
+```
+上次输出格式有误：{error_message}
+请严格按以下 JSON Schema 输出，不要附加任何解释：
+{schema_json}
+```
 
 ### 9.2 LLM 输出格式错误处理
 
@@ -2553,17 +2645,23 @@ coll = COLLECT(
 5. **图标**：提供 .ico（Windows）和 .icns（macOS）
 
 ```python
-# 打包后定位静态文件
+# 打包后定位静态文件（质询修复 #10）
 import sys
 from pathlib import Path
 
-def get_web_dir() -> str:
+def get_web_dir() -> Path:
+    """获取前端静态文件目录（开发/打包模式通用）"""
     if getattr(sys, 'frozen', False):
-        base = Path(sys._MEIPASS)
-        return str(base / "novel2script" / "web")
+        # 打包模式：使用 PyInstaller 的 _MEIPASS
+        return Path(sys._MEIPASS) / "novel2script" / "web"
     else:
-        from importlib.resources import files
-        return str(files("novel2script.web"))
+        # 开发模式：使用 importlib.resources（推荐）或相对于当前文件的路径
+        try:
+            from importlib.resources import files
+            return files("novel2script.web")
+        except ImportError:
+            # Python < 3.9 回退
+            return Path(__file__).parent / "web"
 ```
 
 ### 11.6 不做的事情
