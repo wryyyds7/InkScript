@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "novel2script"
+version = "1.0.0"
+description = "将小说自动转换为结构化剧本的桌面应用"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.27.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "pyyaml>=6.0",
+    "openai>=1.10.0",
+    "pywebview>=5.0",
+    "typer>=0.9.0",
+    "rich>=13.7.0",
+    "sse-starlette>=1.6.0",
+    "python-dotenv>=1.0.0",
+    "cryptography>=42.0.0",
+    "keyring>=25.0.0",
+    "tiktoken>=0.5.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.23.0",
+    "httpx>=0.26.0",
+    "pytest-cov>=4.1.0",
+]
+
+[project.scripts]
+novel2script = "novel2script.cli:app"
+
+[tool.setuptools.packages.find]
+include = ["novel2script*"]
+where = ["."]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+
+[tool.pyright]
+pythonVersion = "3.10"
+include = ["src", "tests"]
+strict = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.pyinstaller]
+# PyInstaller 配置（通过 spec 文件管理）
