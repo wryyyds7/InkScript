@@ -55,14 +55,15 @@ AIGC:
 **V1 核心能力**：
 1. **双启动模式**：桌面模式（PyWebView）+ CLI 模式，共享后端
 2. **内置编辑器**：左右分栏、滚动联动、Beat 内联编辑、CodeMirror 6 驱动
-3. **项目管理**：项目列表首页、自动归档、可持续编辑
-4. **Skill 系统**：内置 Skill + 用户自定义 Skill（通过文件夹安装，无需启用/禁用）
-5. **用户自选 AI**：用户自己配置模型（无预设），API Key 本地存储
-6. **长文本智能分段**：根据模型上下文长度自动计算阈值 + 上下文窗口
-7. **智能分章策略**：正则匹配章标题 + 无章标题且文本≥6000 字时自动分割
-8. **SSE 实时进度推送**：每完成一个 Pipeline 步骤推送一次
-9. **超时机制**：超长超时（1 小时），网络问题时继续等待，用户可手动取消
-10. **打包分发**：PyInstaller 单文件 exe
+3. **项目管理**：项目列表首页、自动归档、可持续编辑、版本历史、回收站
+4. **Skill 系统**：内置 Skill + 用户自定义 Skill（支持启用/禁用、优先级控制、错误日志）
+5. **用户自选 AI**：用户自己配置模型（无预设），API Key 本地加密存储
+6. **长文本智能分段**：根据模型上下文长度自动计算阈值（保守估计）+ 可配置上下文窗口 + 角色别名合并
+7. **智能分章策略**：正则匹配章标题（支持中英文）+ 场景跳转关键词分割 + 手动标记优先级高于自动分割
+8. **SSE 实时进度推送**：每完成一个 Pipeline 步骤推送一次 + Skill 错误日志推送
+9. **超时与重试机制**：动态超时计算（根据输入文本长度和模型速度）+ 自动重试（最多 3 次，指数退避）+ 取消后清理临时文件
+10. **配置管理**：配置冲突处理（优先级明确）+ 配置文件错误处理（使用默认值）+ API Key 加密存储
+11. **打包分发**：PyInstaller 单文件 exe
 
 ### 1.2 目标用户
 
@@ -219,6 +220,8 @@ AIGC:
 | 项目搜索 | 按标题关键词搜索项目 | P1 | 搜索结果实时过滤，无匹配时显示空状态 | 后续可加全文搜索（搜索项目内对白/角色名） |
 | 项目删除 | 删除项目（移入回收站，可恢复） | P1 | 删除后从列表消失，回收站可恢复 | 后续可加"永久删除"和"项目归档" |
 | 项目排序 | 按创建时间/最近编辑/标题排序 | P2 | 排序切换即时生效 | 后续可加自定义排序 |
+| 版本历史 | 在项目内查看版本历史，支持回滚 | P1 | 版本历史列表展示，可选择版本回滚 | 版本快照存储在 `versions/` 文件夹，最多保留 10 个版本 |
+| 回收站 | 已删除项目进入回收站，支持恢复或永久删除 | P1 | 回收站列表展示，支持恢复（移动到原位置）或永久删除（删除项目目录） | 回收站目录为 `~/.novel2script/trash/`，保留 30 天自动清理 |
 
 ### 4.2 项目创建与存储
 
@@ -299,13 +302,16 @@ class EditMeta(BaseModel):
 | 功能点 | 描述 | 优先级 | 验收标准 | 扩展点 |
 |-------|------|-------|---------|--------|
 | 导航栏 Skills 入口 | Web UI 导航栏新增"Skills"入口，点击进入 Skill 管理页面 | P0 | 导航栏显示"Skills"文字/图标，点击跳转 Skill 管理页 | 后续可加"Skill 商店"入口，与本地 Skill 管理页合并 |
-| Skill 列表展示 | 展示所有已安装 Skill（内置+用户自定义），显示名称、类型、描述、来源 | P0 | 列表区分内置/用户 Skill，显示 skill.json 中的元信息 | 后续可加"已安装/可更新/商店推荐" Tab 切换 |
-| Skill 运行 | 选择 Skill → 点击"运行" → 选择输入数据 → 展示结果 | P0 | 运行内置 Skill 成功，结果在页面展示 | 后续可加"Skill 链式执行"——多个 Skill 串联 |
-| Skill 创建 | 用户点击"创建 Skill"，生成模板（skill.json + main.py） | P1 | 创建后在 `~/.novel2script/skills/` 下生成目录和模板 | 后续可加"Skill 可视化编辑器"——在线编辑 main.py |
+| Skill 列表展示 | 展示所有已安装 Skill（内置+用户自定义），显示名称、类型、描述、来源、优先级、启用状态 | P0 | 列表区分内置/用户 Skill，显示 skill.json 中的元信息，支持按优先级排序 | 后续可加"已安装/可更新/商店推荐" Tab 切换 |
+| Skill 运行 | 选择 Skill → 点击"运行" → 选择输入数据 → 展示结果（含错误日志） | P0 | 运行内置 Skill 成功，结果在页面展示；Skill 失败时在页面展示错误日志 | 后续可加"Skill 链式执行"——多个 Skill 串联 |
+| Skill 启用/禁用 | 在 Skill 列表中提供启用/禁用开关 | P1 | 禁用后的 Skill 不会被执行，再次启用后恢复正常 | 启用/禁用状态存储在 `skill.json` 的 `enabled` 字段 |
+| Skill 优先级调整 | 在 Skill 列表中提供优先级调整功能（拖拽或数字输入） | P1 | 同类型 Skill 按优先级顺序执行，优先级高的先执行 | 优先级存储在 `skill.json` 的 `priority` 字段 |
+| Skill 错误日志 | Skill 执行失败时，记录错误日志并通过 SSE 推送前端 | P1 | 错误日志包含时间戳、Skill 名称、错误信息、堆栈跟踪；前端展示错误详情 | 错误日志文件存储在 `project_dir/skill_errors.log` |
+| Skill 创建 | 用户点击"创建 Skill"，生成模板（skill.json + main.py） | P1 | 创建后在 `~/.novel2script/skills/` 下生成目录和模板（含 `priority` 和 `enabled` 字段） | 后续可加"Skill 可视化编辑器"——在线编辑 main.py |
 | Skill 安装 | 支持从本地路径安装 Skill | P1 | 指定本地路径，复制到 skills 目录并生效 | 后续加"在线安装"——从 GitHub/Gitee URL 安装（V2） |
 | Skill 覆盖规则 | 用户 Skill 同名可覆盖内置 Skill | P1 | 同名用户 Skill 优先级高于内置 Skill，列表标注"已覆盖" | 覆盖规则可扩展为"版本优先级"覆盖策略 |
 | CLI 运行 Skill | `novel2script skill run <name> --input <yaml_text>` | P0 | 终端执行 Skill 并输出结果 | 后续加 `skill install <url>` / `skill publish` 子命令 |
-| CLI 列出 Skill | `novel2script skill list` 列出所有可用 Skill | P1 | 输出 Skill 名称、类型、来源 | 后续可加 `skill info <name>` 展示详细信息 |
+| CLI 列出 Skill | `novel2script skill list` 列出所有可用 Skill | P1 | 输出 Skill 名称、类型、来源、优先级、启用状态 | 后续可加 `skill info <name>` 展示详细信息 |
 
 ### 5.2 内置 Skill
 
@@ -402,7 +408,7 @@ class LocalSkillSource(SkillSource):
 | 6 个预设模型 | 下拉预设：GPT-4o / DeepSeek-Chat / Moonshot-v1 / GLM-4 / Ollama（本地） / SiliconFlow | P0 | 选择预设后自动填充 Endpoint 和模型名，仅需填 API Key | 预设列表可从远程配置更新，无需发版 |
 | 自定义配置 | 用户可完全自定义 API Key / Endpoint / Model | P0 | 手动填写三个字段，不依赖预设列表 | 后续可加"自定义请求头/参数"——支持非标准 API |
 | 连接测试 | 设置页提供"测试连接"按钮，验证 API 可用性 | P1 | 点击后发送简短请求，返回成功/失败+模型名确认 | 后续可加"模型能力检测"——自动识别是否支持 JSON Mode |
-| 配置持久化 | 保存到 `~/.novel2script/config.json` | P0 | 保存后重启应用仍可读取；API Key 明文存储（本地工具） | 后续可加密存储（如 keyring 库） |
+| 配置持久化 | 保存到 `~/.novel2script/config.json`，API Key 加密存储 | P0 | 保存后重启应用仍可读取；API Key 使用 Fernet 对称加密（cryptography 库） | 加密密钥存储在操作系统密钥管理服务（Windows DPAPI、macOS Keychain、Linux Secret Service） |
 | CLI 参数覆盖 | CLI 参数优先级高于配置文件 | P0 | `--api-key xxx` 覆盖 config.json 中的值，不影响文件内容 | 后续可加 `--config <path>` 指定配置文件路径 |
 | Ollama 支持 | API Endpoint 填 `http://localhost:11434/v1`，API Key 填任意值 | P1 | Ollama 运行时可通过连接测试 | 后续可加"Ollama 模型列表自动发现" |
 
@@ -430,10 +436,11 @@ class LocalSkillSource(SkillSource):
 
 | 功能点 | 描述 | 优先级 | 验收标准 | 扩展点 |
 |-------|------|-------|---------|--------|
-| 分段阈值自动计算 | 根据模型上下文长度自动计算分段阈值（如 `model_context_length * 0.8 / avg_token_per_char`） | P0 | 不同模型自动适配不同的分段阈值 | 阈值可通过 config.json 调整 |
-| 上下文窗口 | 每段保留前一段末尾的若干字作为上下文衔接（具体实现：在 Prompt 中添加"前文摘要"字段） | P0 | 分段处理后 LLM 可看到前段的摘要，角色指代不丢失 | 上下文窗口大小可通过 config.json 调整 |
+| 分段阈值自动计算 | 根据模型上下文长度自动计算分段阈值（保守估计：1 个字符 = 1 个 token） | P0 | 不同模型自动适配不同的分段阈值，保守估计确保安全 | 阈值可通过 config.json 调整 |
+| 上下文窗口 | 每段保留前一段末尾的若干字作为上下文衔接（具体实现：在 Prompt 中添加"前文摘要"字段） | P0 | 分段处理后 LLM 可看到前段的摘要，角色指代不丢失 | 上下文窗口大小可通过 config.json 的 `context_window_size` 字段调整（默认 200） |
 | 分段合并 | 各段处理结果自动合并为完整章节结果 | P0 | 合并后角色 ID 全局统一，无重复角色；跨段的角色别名和场景自动合并 | 后续可加"智能合并"——跨段场景合并 |
 | 全章角色表预注入 | 分段处理前先完成全文章节的角色识别，角色表作为全局上下文 | P0 | 分段场景分割时 LLM 可引用已识别的角色表 | 后续可加"角色表增量更新"——新增角色自动合并 |
+| 角色别名合并 | 跨段合并时，使用字符串相似度（Levenshtein 距离）合并角色别名 | P0 | 如果两个角色名相似度 > 80%，则认为是同一角色，合并别名 | 后续可加"角色名自动纠错"——基于上下文自动修正角色名 |
 | Token 估算 | 处理前估算各章节 token 数，提前判断是否需要分段 | P1 | 估算误差 < 20%，超过模型上下文 80% 时触发分段 | 后续可加"实际 token 计数"——基于 tiktoken 精确计数 |
 
 **技术实现方案**（待开发文档中详细说明）：
@@ -450,9 +457,10 @@ class LocalSkillSource(SkillSource):
 
 | 功能点 | 描述 | 优先级 | 验收标准 | 扩展点 |
 |-------|------|-------|---------|--------|
-| 章标题正则匹配 | 支持"第 X 章/节/幕/回"、"Chapter X"、"PART X"等格式 | P0 | 常见章标题格式均可正确识别 | 后续可加自定义正则配置 |
+| 章标题正则匹配 | 支持"第 X 章/节/幕/回"、"Chapter X"、"PART X"等中英文格式 | P0 | 常见章标题格式均可正确识别（支持大小写不敏感匹配） | 后续可加自定义正则配置 |
 | 无章标题处理 | 如果文本没有任何章标题，整篇当作一个"全文"章处理 | P0 | 无章标题时，章节列表显示"全文" | — |
-| 智能分章 | 无章标题且文本 ≥ 6000 字时，按空行密集处或场景跳转关键词自动分割 | P1 | 自动分割后的章节长度均匀，场景转换处正确分割 | 后续可加"手动插入章节标记"功能 |
+| 智能分章 | 无章标题且文本 ≥ 6000 字时，优先按场景跳转关键词分割，其次按空行密集处分割 | P1 | 自动分割后的章节长度均匀，场景转换处正确分割 | 场景跳转关键词列表可配置 |
+| 手动标记优先级 | 手动插入的章节标记（如 `--- Chapter X ---`）优先级高于自动分割 | P0 | 存在手动标记时，直接使用手动标记，跳过自动分割 | 后续可加"手动标记可视化编辑"功能 |
 | 章节长度限制 | 单个章节超过 6000 字时，在 Pipeline 阶段自动分段处理 | P0 | 超长章节自动分段，不影响转换质量 | 分段阈值可根据模型自动计算 |
 
 **技术实现方案**（待开发文档中详细说明）：
@@ -479,6 +487,7 @@ class LocalSkillSource(SkillSource):
 | 阶段事件 | 文本预处理/角色识别/场景分割/对白解析/情绪标注/YAML 生成，每阶段开始/完成/失败各推送一次 | P0 | 6 个阶段 × 3 种状态 = 18 种事件，前端实时渲染 | 后续新阶段只需注册事件，前端自动识别 |
 | 进度百分比 | 每个阶段推送当前进度百分比 | P0 | 进度从 0 到 100 平滑递增 | 后续可加"剩余时间估算" |
 | 错误事件 | 转换失败推送 error 事件，含错误信息和建议 | P0 | 前端展示错误信息和重试按钮 | 后续可加"部分失败"——某章节失败其他继续 |
+| Skill 错误日志推送 | Skill 执行失败时推送 `skill_error` 事件 | P1 | 前端展示 Skill 错误详情（Skill 名称、错误信息、堆栈跟踪） | 错误日志同时写入 `project_dir/skill_errors.log` |
 
 ---
 
@@ -530,8 +539,19 @@ class LocalSkillSource(SkillSource):
 
 [Skill 使用]
   编辑器内或导航栏 → Skills 入口
-  → Skill 列表 → 选择 Skill → 运行 → 查看结果
+  → Skill 列表 → 选择 Skill → 运行 → 查看结果（含错误日志）
   → 角色分析报告 / 对白润色 / 风格适配 / 章节概要
+  → 可调整 Skill 优先级、启用/禁用 Skill
+
+[版本历史]
+  编辑器内 → "版本历史" 按钮
+  → 查看版本列表（时间、操作描述）
+  → 选择版本 → 预览 / 回滚
+
+[回收站]
+  首页 → "回收站" 入口
+  → 查看已删除项目列表
+  → 选择项目 → 恢复 / 永久删除
 
 [退出]
   关闭 PyWebView 窗口 → 程序退出
@@ -573,19 +593,24 @@ novel2script skill list
 | Web UI 首屏加载 | ≤ 2 秒 | 本地 FastAPI 服务，HTML/CSS/JS 直出 |
 | 编辑器响应 | ≤ 100ms | CodeMirror 6 输入延迟 |
 | 滚动联动响应 | ≤ 300ms | 点击 Beat 到原文定位完成 |
-| 自动保存 | ≤ 2 秒 | 编辑后 2 秒内自动保存 |
+| 自动保存 | ≤ 2 秒 | 编辑后 2 秒内自动保存（**含版本历史生成**） |
 | 内存占用 | ≤ 500MB | 处理 10 万字小说时的峰值内存 |
-| 打包体积 | 50-80MB | 含 Python 运行时的单文件 exe |
+| 打包体积 | 50-80MB | 含 Python 运行时的单文件 exe（**含 cryptography 依赖**） |
+| 动态超时计算 | ≤ 100ms | 根据输入文本长度和模型速度计算超时时间 |
+| 自动重试间隔 | 指数退避 | 重试延迟 = `retry_delay_base ** retry`（默认 base=2） |
 
 ### 11.2 安全
 
 | 要求 | 说明 |
 |------|------|
-| API Key 本地存储 | 配置文件 `~/.novel2script/config.json` 存储 API Key，仅本机可读 |
+| API Key 本地存储 | 配置文件 `~/.novel2script/config.json` 存储 API Key（**加密存储**，使用 Fernet 对称加密） |
+| 加密密钥管理 | 加密密钥存储在操作系统提供的密钥管理服务中（Windows DPAPI、macOS Keychain、Linux Secret Service） |
 | 无外发数据 | 除用户配置的 LLM API 调用外，不向任何外部服务发送数据 |
 | 无内置密钥 | 工具不内置任何 API Key |
 | 文件权限 | 配置文件创建时设置 600 权限 |
 | Skill 沙箱 | 用户自定义 Skill 在子进程中运行，异常不影响主程序 |
+| 配置错误处理 | 配置文件格式错误时，捕获异常并使用默认配置，通过 SSE 推送警告信息 |
+| 配置冲突处理 | 明确配置优先级：运行时参数 > 环境变量 > 项目配置快照 > 全局配置文件 > 默认值 |
 
 ### 11.3 兼容性
 
@@ -601,11 +626,13 @@ novel2script skill list
 | 要求 | 说明 |
 |------|------|
 | 断点续传 | Pipeline 中间结果缓存到 `.cache/` 目录，失败后可从最近检查点恢复 |
-| LLM 重试 | 单次 LLM 调用失败自动重试最多 3 次 |
+| LLM 重试 | 单次 LLM 调用失败自动重试最多 3 次（指数退避） |
 | 优雅降级 | PyWebView 不可用时回退浏览器；情绪标注失败不阻塞 YAML 生成 |
 | 编辑不丢失 | 自动保存机制 + 项目持久化，关闭窗口再打开不丢数据 |
-| Skill 异常隔离 | 自定义 Skill 运行异常不崩溃主程序 |
-| 超时机制 | 设置超长超时（1 小时），网络问题时继续等待，用户可手动取消 |
+| Skill 异常隔离 | 自定义 Skill 运行异常不崩溃主程序，错误日志记录到 `skill_errors.log` |
+| 动态超时 | 根据输入文本长度和模型速度动态计算超时时间（公式：`timeout = max(默认超时, 预估时间 * 2)`） |
+| 自动重试 | Pipeline 单个步骤超时后自动重试（最多 3 次，指数退避），重试 3 次仍超时则终止整个 Pipeline |
+| 取消后清理 | 用户取消转换后，自动清理临时文件（删除 `temp/` 目录下的分段中间结果） |
 
 ---
 
@@ -657,6 +684,8 @@ class SkillMeta(BaseModel):
     version: str
     description: str
     author: str
+    priority: int = 0          # 优先级，数值越大优先级越高
+    enabled: bool = True         # 是否启用
 
 class SkillResult(BaseModel):
     skill_name: str
@@ -705,20 +734,25 @@ class EditState(BaseModel):
 | 任务 | 优先级 | 交付物 | 验收标准 |
 |------|-------|-------|---------|
 | 项目脚手架 | P0 | pyproject.toml + 目录结构 + typer CLI | `novel2script --help` 正常输出 |
-| 配置管理 | P0 | config.py | 读写 config.json，CLI 参数可覆盖 |
+| 配置管理 | P0 | config.py | 读写 config.json，CLI 参数可覆盖，**API Key 加密存储** |
+| **配置冲突处理** | **P0** | config.py | **明确配置优先级：运行时参数 > 环境变量 > 项目配置快照 > 全局配置文件 > 默认值** |
+| **配置文件错误处理** | **P0** | config.py | **捕获配置文件格式错误，使用默认配置，通过 SSE 推送警告** |
 | LLM 客户端 | P0 | llm_client.py | 支持 OpenAI 兼容接口，含重试和 JSON 解析 |
 | 文本预处理 | P0 | preprocessor.py | 章节分割 + 清洗 + 段落切分 |
+| **智能分章策略** | **P0** | preprocessor.py | **支持中英文章标题格式 + 场景跳转关键词分割 + 手动标记优先级** |
 | 角色识别 | P0 | character_extractor.py | 提取角色 + 别名合并 |
+| **角色别名合并** | **P0** | character_extractor.py | **使用字符串相似度（Levenshtein 距离）合并别名** |
 | 场景分割 | P0 | scene_splitter.py | 按时空变化分割场景 |
 | 对白解析 | P0 | dialogue_parser.py | 对白/旁白/动作/内心独白分类 |
 | YAML 生成 + 校验 | P0 | yaml_generator.py + validator.py | 生成符合 Schema 的 YAML |
 | Pipeline 编排 | P0 | pipeline.py | 顺序编排 + 断点缓存 + SSE 进度回调 |
-| 长文本智能分段 | P0 | 集成到 pipeline.py | 超 6000 字章节自动分段 + 上下文窗口 |
+| **超时与重试机制** | **P0** | pipeline.py | **动态超时计算 + 自动重试（最多 3 次，指数退避）+ 取消后清理临时文件** |
+| 长文本智能分段 | P0 | 集成到 pipeline.py | **保守估计阈值（1 个字符 = 1 个 token）+ 可配置上下文窗口** |
 | CLI convert / validate | P0 | main.py | CLI 可跑通完整转换 |
 | PyWebView 桌面模式 | P0 | desktop.py | 独立窗口启动 + 回退浏览器 |
-| FastAPI 服务 | P0 | server.py | SSE 进度推送可用 |
-| **项目管理基础** | **P0** | **project_store.py** | **项目 CRUD + 项目目录创建 + 项目列表 API** |
-| **项目列表首页** | **P0** | **Web UI** | **首页展示项目卡片列表** |
+| FastAPI 服务 | P0 | server.py | SSE 进度推送可用（**含 Skill 错误日志推送**） |
+| **项目管理基础** | **P0** | **project_store.py** | **项目 CRUD + 项目目录创建 + 项目列表 API + 版本历史 + 回收站** |
+| **项目列表首页** | **P0** | **Web UI** | **首页展示项目卡片列表（含版本历史、回收站入口）** |
 
 ### Day 2：内置编辑器 + Skill 系统
 
@@ -730,16 +764,19 @@ class EditState(BaseModel):
 | **滚动联动** | **P0** | **联动引擎** | **点击 Beat → 左面板自动定位原文位置** |
 | **Beat 内联编辑** | **P0** | **Web UI** | **对白/情绪/角色可内联编辑** |
 | **小说预处理** | **P1** | **Web UI** | **原文可切换编辑模式，可删章节** |
-| **自动保存** | **P0** | **项目持久化** | **编辑后 2 秒自动保存到项目目录** |
+| **自动保存** | **P0** | **项目持久化** | **编辑后 2 秒自动保存到项目目录 + 版本历史自动生成** |
 | **导出功能** | **P0** | **Web UI** | **导出 .yaml / .fountain / .txt** |
-| Skill 引擎：加载器 | P0 | skills/loader.py | 发现、解析、校验内置和用户 Skill |
-| Skill 引擎：运行器 | P0 | skills/runner.py | 执行 Skill，异常隔离 |
+| Skill 引擎：加载器 | P0 | skills/loader.py | 发现、解析、校验内置和用户 Skill（**含 priority 和 enabled 字段**） |
+| Skill 引擎：运行器 | P0 | skills/runner.py | 执行 Skill，异常隔离（**含错误日志记录**） |
+| **Skill 错误日志** | **P1** | **skills/runner.py + SSE** | **Skill 失败时记录错误日志，通过 SSE 推送前端** |
+| **Skill 优先级执行** | **P1** | **skills/runner.py** | **同类型 Skill 按优先级顺序执行** |
+| **Skill 启用/禁用** | **P1** | **skills/loader.py + Web UI** | **支持启用/禁用 Skill，禁用后不执行** |
 | 内置 Skill：Fountain 导出 | P0 | builtins/fountain-export/ | YAML → .fountain 转换正确 |
 | 内置 Skill：角色分析/对白润色/风格适配/章节概要 | P1 | builtins/ | 各 Skill 运行成功 |
-| Skill 管理页面 | P0 | Web UI | 列表展示 + 运行 + 结果展示 |
-| CLI skill 命令 | P0 | main.py | `skill run` + `skill list` |
-| 设置页 | P0 | Web UI | 6 预设 + 自定义 API 配置 + 连接测试 + 保存 |
-| SSE 进度页 | P0 | Web UI | 转换过程实时展示进度 |
+| Skill 管理页面 | P0 | Web UI | 列表展示 + 运行 + 结果展示（**含错误日志、优先级调整、启用/禁用开关**） |
+| CLI skill 命令 | P0 | main.py | `skill run` + `skill list`（**含 priority 和 enabled 信息**） |
+| 设置页 | P0 | Web UI | 6 预设 + 自定义 API 配置 + 连接测试 + 保存（**API Key 加密存储**） |
+| SSE 进度页 | P0 | Web UI | 转换过程实时展示进度（**含 Skill 错误日志推送**） |
 
 ### Day 3：打磨 + 打包 + 测试
 
@@ -747,11 +784,15 @@ class EditState(BaseModel):
 |------|-------|-------|---------|
 | Schema 校验 lint | P0 | CodeMirror 6 linter 扩展 | 编辑 YAML 时实时校验提示 |
 | 项目搜索/排序 | P1 | Web UI | 按标题搜索，按时间/名称排序 |
+| **版本历史 UI** | **P1** | **Web UI** | **项目内查看版本历史，支持回滚** |
+| **回收站 UI** | **P1** | **Web UI** | **回收站列表，支持恢复/永久删除** |
 | 中间结果预览 | P1 | Web UI | 各环节完成后可预览角色表/场景列表 |
 | 原文溯源查看 | P1 | Web UI | 点击 Beat 查看 source_text 原文 |
 | .docx 文件解析 | P1 | preprocessor.py | 上传 .docx 文件正确提取文本 |
-| Skill 创建模板 | P1 | Web UI + loader.py | 点击"创建 Skill"生成模板 |
+| Skill 创建模板 | P1 | Web UI + loader.py | 点击"创建 Skill"生成模板（**含 priority 和 enabled 字段**） |
 | Skill 安装（本地） | P1 | Web UI + loader.py | 从本地路径安装 Skill |
+| **Skill 错误日志 UI** | **P1** | **Web UI** | **Skill 管理页面展示错误日志** |
+| **配置冲突处理提示** | **P1** | **Web UI** | **设置页展示配置冲突提示** |
 | PyInstaller 打包 | P0 | novel2script.spec + 打包脚本 | 打包为单个 exe，双击可启动 |
 | 打包资源完整性 | P0 | 验证 | 打包后 UI 正常加载、Skill 可运行、CodeMirror 可用 |
 | 整体测试 + Bug 修复 | P0 | - | 核心流程无阻断性 Bug |
@@ -1094,14 +1135,19 @@ class EditState(BaseModel):
 11. **项目管理：自动创建项目（转换后）**
 12. **项目管理：项目持久化存储**
 13. **项目管理：进入项目继续编辑**
-14. 用户自选 AI（6 预设 + 自定义）
-15. 配置持久化（config.json）
-16. 长文本智能分段（6000 字 + 200 字上下文）
-17. SSE 实时进度推送
-18. Skill 引擎：加载器 + 运行器
-19. 内置 Skill：Fountain 导出
-20. Skill 管理页面 + CLI skill 命令
-21. PyInstaller 打包为单文件 exe
+14. **项目管理：版本历史（自动生成版本快照）**
+15. **项目管理：回收站（删除项目可恢复）**
+16. 用户自选 AI（6 预设 + 自定义）
+17. 配置持久化（config.json，**API Key 加密存储**）
+18. 长文本智能分段（保守估计阈值 + 可配置上下文窗口 + 角色别名合并）
+19. 智能分章策略（场景跳转关键词 + 手动标记优先级 + 英文支持）
+20. SSE 实时进度推送（含 Skill 错误日志推送）
+21. **超时与重试机制：动态超时计算 + 自动重试（最多 3 次，指数退避）+ 取消后清理临时文件**
+22. **配置管理：配置冲突处理（优先级明确）+ 配置文件错误处理（使用默认值）**
+23. Skill 引擎：加载器 + 运行器（含错误日志、优先级、启用/禁用）
+24. 内置 Skill：Fountain 导出
+25. Skill 管理页面 + CLI skill 命令
+26. PyInstaller 打包为单文件 exe
 
 ### P1（尽量完成，提升体验）
 
@@ -1112,12 +1158,15 @@ class EditState(BaseModel):
 5. 项目配置查看
 6. 连接测试
 7. 内置 Skill：角色分析报告 / 对白润色 / 风格适配 / 章节概要
-7. Skill 创建模板 / 安装（本地路径）
-8. Token 估算
-9. .docx 文件解析
-10. 中间结果预览
-11. 原文溯源查看
-12. 桌面模式单实例运行
+8. Skill 创建模板 / 安装（本地路径）
+9. Skill 错误日志展示（前端）
+10. Skill 优先级调整（前端）
+11. Token 估算
+12. .docx 文件解析
+13. 中间结果预览
+14. 原文溯源查看
+15. 桌面模式单实例运行
+16. 配置冲突处理提示（前端）
 
 ### P2（后续迭代）
 
@@ -1142,7 +1191,7 @@ class EditState(BaseModel):
 | POST | `/api/v1/projects` | 创建新项目 |
 | GET | `/api/v1/projects/{project_id}` | 获取项目详情 |
 | PUT | `/api/v1/projects/{project_id}` | 更新项目（标题、状态等） |
-| DELETE | `/api/v1/projects/{project_id}` | 删除项目 |
+| DELETE | `/api/v1/projects/{project_id}` | 删除项目（移入回收站） |
 | GET | `/api/v1/projects/{project_id}/novel` | 获取项目小说原文 |
 | PUT | `/api/v1/projects/{project_id}/novel` | 更新小说原文 |
 | GET | `/api/v1/projects/{project_id}/script` | 获取项目 YAML 剧本 |
@@ -1151,9 +1200,15 @@ class EditState(BaseModel):
 | GET | `/api/v1/projects/{project_id}/edit-state` | 获取编辑器状态（滚动位置等） |
 | PUT | `/api/v1/projects/{project_id}/edit-state` | 保存编辑器状态 |
 | POST | `/api/v1/projects/{project_id}/convert` | 在项目内启动/重新转换 |
-| GET | `/api/v1/projects/{project_id}/stream` | SSE 实时进度推送 |
+| GET | `/api/v1/projects/{project_id}/stream` | SSE 实时进度推送（含 Skill 错误日志） |
 | POST | `/api/v1/projects/{project_id}/export` | 导出项目（`?format=yaml/fountain/txt`） |
 | POST | `/api/v1/projects/{project_id}/validate` | 校验当前剧本 |
+| GET | `/api/v1/projects/{project_id}/versions` | 获取项目版本历史列表 |
+| POST | `/api/v1/projects/{project_id}/versions/{version_id}/rollback` | 回滚到指定版本 |
+| DELETE | `/api/v1/projects/{project_id}/versions/{version_id}` | 删除指定版本快照 |
+| GET | `/api/v1/trash` | 获取回收站项目列表 |
+| POST | `/api/v1/trash/{project_id}/restore` | 恢复回收站中的项目 |
+| DELETE | `/api/v1/trash/{project_id}` | 永久删除回收站中的项目 |
 
 ### 转换 API
 
@@ -1182,8 +1237,11 @@ class EditState(BaseModel):
 | POST | `/api/v1/skills/{name}/run` | 运行指定 Skill |
 | POST | `/api/v1/skills/create` | 创建用户自定义 Skill 模板 |
 | POST | `/api/v1/skills/install` | 从本地路径安装 Skill |
+| PUT | `/api/v1/skills/{name}/enable` | 启用/禁用指定 Skill（请求体：`{"enabled": true/false}`） |
+| PUT | `/api/v1/skills/{name}/priority` | 调整 Skill 优先级（请求体：`{"priority": 10}`） |
 | DELETE | `/api/v1/skills/{name}` | 卸载用户自定义 Skill（内置不可卸载，返回 403） |
 | GET | `/api/v1/skills/{name}/template` | 获取 Skill 模板代码 |
+| GET | `/api/v1/skills/{name}/errors` | 获取 Skill 错误日志（从 `skill_errors.log`） |
 
 ### 通用 API
 
@@ -1234,7 +1292,7 @@ POST /api/v1/skills/character-analysis/run
 
 ```
 ~/.novel2script/
-├── config.json                  # 用户配置（含 features 开关）
+├── config.json                  # 用户配置（含 features 开关，API Key 加密存储）
 ├── projects/                    # 项目数据
 │   ├── <project_id_1>/
 │   │   ├── project.json         # 项目元信息
@@ -1242,16 +1300,20 @@ POST /api/v1/skills/character-analysis/run
 │   │   ├── script.yaml          # YAML 剧本
 │   │   ├── config_snapshot.json # 转换配置快照
 │   │   ├── edit_meta.json       # 编辑元数据
-│   │   ├── snapshots/           # [V2] 版本快照
-│   │   └── annotations/         # [V2] 批注
+│   │   ├── versions/            # [V1] 版本历史（script_v1.yaml、script_v2.yaml...）
+│   │   ├── annotations/         # [V2] 批注
+│   │   └── skill_errors.log     # [V1] Skill 错误日志
 │   └── <project_id_2>/
 │       └── ...
 ├── skills/                      # 用户自定义 Skill
 │   ├── my-custom-skill/
-│   │   ├── skill.json
+│   │   ├── skill.json           # 含 priority 和 enabled 字段
 │   │   └── main.py
 │   └── ...
-└── cache/                       # 运行时缓存
+├── trash/                       # [V1] 回收站（已删除项目备份，保留 30 天）
+│   └── <project_id>/
+│       └── ...
+└── cache/                       # 运行时缓存（含临时文件，取消后清理）
 ```
 
 ## 附录 D：源码目录结构
@@ -1263,38 +1325,38 @@ novel2script/
 │   ├── main.py                  # CLI 入口（typer）：gui / convert / validate / skill
 │   ├── desktop.py               # PyWebView 桌面模式入口
 │   ├── server.py                # FastAPI 服务入口（/api/v1/ 路由）
-│   ├── pipeline.py              # 流程编排（含 Hook 机制）
-│   ├── models.py                # Pydantic 数据模型
-│   ├── preprocessor.py          # 文本预处理
-│   ├── character_extractor.py   # 角色识别
+│   ├── pipeline.py              # 流程编排（含 Hook 机制、**动态超时、自动重试、取消后清理**）
+│   ├── models.py                # Pydantic 数据模型（含 SkillMeta 的 priority 和 enabled 字段）
+│   ├── preprocessor.py          # 文本预处理（**智能分章策略：场景跳转关键词、手动标记优先级、英文支持**）
+│   ├── character_extractor.py   # 角色识别（**角色别名合并：Levenshtein 距离**）
 │   ├── scene_splitter.py        # 场景分割
 │   ├── dialogue_parser.py       # 对白解析
 │   ├── emotion_tagger.py        # 情绪标注
 │   ├── yaml_generator.py        # YAML 生成
 │   ├── validator.py             # Schema 校验
-│   ├── llm_client.py            # LLM 调用封装
-│   ├── config.py                # 配置管理
-│   ├── project_store.py         # 项目数据访问层（抽象 + 文件系统实现）
+│   ├── llm_client.py            # LLM 调用封装（含重试机制）
+│   ├── config.py                # 配置管理（**API Key 加密存储、配置冲突处理、配置文件错误处理**）
+│   ├── project_store.py         # 项目数据访问层（**版本历史、回收站**）
 │   ├── skills/                  # Skill 引擎
 │   │   ├── __init__.py
-│   │   ├── loader.py            # Skill 加载器（SkillSource 抽象）
-│   │   ├── runner.py            # Skill 运行器
+│   │   ├── loader.py            # Skill 加载器（**支持 enabled 和 priority 字段**）
+│   │   ├── runner.py            # Skill 运行器（**错误日志记录、按优先级执行**）
 │   │   └── builtins/            # 内置 Skill
 │   │       ├── fountain-export/
 │   │       ├── character-analysis/
 │   │       ├── dialogue-polish/
 │   │       ├── style-adapt/
 │   │       └── chapter-summary/
-│   ├── prompts/                 # Prompt 模板
+│   ├── prompts/                 # Prompt 模板（**长文本智能分段：保守估计阈值、可配置上下文窗口**）
 │   └── static/                  # Web UI 前端文件
 │       ├── index.html           # Alpine.js + Tailwind CSS CDN
 │       ├── css/
 │       ├── js/
-│       │   ├── app.js           # 主应用（路由 + 事件总线）
+│       │   ├── app.js           # 主应用（路由 + 事件总线 + **版本历史、回收站、Skill 错误日志 UI**）
 │       │   ├── editor.js        # 编辑器组件（CodeMirror 6）
-│       │   ├── projects.js      # 项目列表组件
-│       │   ├── skills.js        # Skill 管理组件
-│       │   └── settings.js      # 设置组件
+│       │   ├── projects.js      # 项目列表组件（**版本历史、回收站 UI**）
+│       │   ├── skills.js        # Skill 管理组件（**错误日志、优先级调整、启用/禁用开关**）
+│       │   └── settings.js      # 设置组件（**配置冲突处理提示**）
 │       └── vendor/              # 第三方库（CDN fallback）
 │           └── codemirror/      # CodeMirror 6 本地缓存
 ├── tests/
@@ -1302,8 +1364,9 @@ novel2script/
 │   ├── architecture.md
 │   ├── yaml-schema.md
 │   ├── prompt-design.md
-│   └── PRD.md
-├── pyproject.toml
+│   ├── PRD.md
+│   └── 架构设计质询报告.md
+├── pyproject.toml                # 依赖包含 cryptography、python-levenshtein
 ├── novel2script.spec            # PyInstaller 打包配置
 └── README.md
 ```
