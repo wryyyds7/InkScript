@@ -69,6 +69,12 @@ function app() {
         currentOperation: null,   // 当前查看的操作详情
         operationFilter: 'all',  // 操作过滤器：all|create_beat|update_beat|delete_beat|update_novel
 
+        // 情绪曲线可视化
+        showEmotionCurve: false,  // 是否显示情绪曲线面板
+        emotionCurveGranularity: 'beat',  // 粒度：beat|scene
+        selectedEmotionPoint: null,  // 选中的情绪点
+        emotionCurveChart: null,  // Chart.js 实例
+
         // 回收站
         showTrash: false,        // 是否显示回收站
         trashItems: [],          // 回收站项目列表
@@ -1503,6 +1509,56 @@ function app() {
             } catch (e) {
                 console.error('记录操作日志失败:', e);
             }
+        },
+
+        // ── 情绪曲线可视化 ────────────────────
+        async toggleEmotionCurve() {
+            this.showEmotionCurve = !this.showEmotionCurve;
+            if (this.showEmotionCurve && this.activeProject) {
+                // 延迟初始化图表，等待 DOM 更新
+                setTimeout(() => {
+                    if (window.initEmotionCurveChart) {
+                        window.initEmotionCurveChart(this);
+                    }
+                }, 100);
+            }
+        },
+
+        /** 滚动到选中的情绪点对应的 Beat */
+        scrollToEmotionPoint() {
+            if (!this.selectedEmotionPoint || !this.scriptEditor) return;
+
+            // 获取剧本 YAML 文本
+            const yamlText = getContent(this.scriptEditor);
+            const beats = parseBeatsFromYaml(yamlText);
+
+            if (this.selectedEmotionPoint.type === 'beat') {
+                // 定位到对应的 Beat
+                const beatIdx = this.selectedEmotionPoint.index;
+                if (beatIdx >= 0 && beatIdx < beats.length) {
+                    const beat = beats[beatIdx];
+                    // 滚动到对应行
+                    this.scriptEditor.dispatch({
+                        selection: { anchor: this.scriptEditor.state.doc.line(beat.lineStart + 1).from },
+                        scrollIntoView: true
+                    });
+                    this.showToast(`已定位到 Beat #${beatIdx + 1}`);
+                }
+            } else if (this.selectedEmotionPoint.type === 'scene') {
+                // 定位到场景的第一个 Beat
+                const sceneId = this.selectedEmotionPoint.sceneId;
+                const firstBeat = beats.find(b => b.scene_id === sceneId);
+                if (firstBeat) {
+                    this.scriptEditor.dispatch({
+                        selection: { anchor: this.scriptEditor.state.doc.line(firstBeat.lineStart + 1).from },
+                        scrollIntoView: true
+                    });
+                    this.showToast(`已定位到场景 ${sceneId}`);
+                }
+            }
+
+            // 关闭面板
+            this.showEmotionCurve = false;
         },
 
         // ── 配置快照查看 ────────────────────

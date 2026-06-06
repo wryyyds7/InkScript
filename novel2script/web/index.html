@@ -30,6 +30,10 @@
     }
     </script>
     <link rel="stylesheet" href="/css/app.css" />
+    <!-- Chart.js CDN（情绪曲线可视化） -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <!-- 情绪曲线可视化模块 -->
+    <script type="module" src="/js/emotion-curve.js"></script>
     <style>
         /* Beat 编辑器弹出层样式 */
         .beat-editor-popup {
@@ -480,6 +484,12 @@
                             </svg>
                             操作日志
                         </button>
+                        <button @click="toggleEmotionCurve()" class="btn-secondary" aria-label="查看情绪曲线">
+                            <svg class="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/>
+                            </svg>
+                            情绪曲线
+                        </button>
                     </div>
                 </div>
                 
@@ -769,6 +779,88 @@
                                         <button @click="closeOperationDetail()" class="btn-secondary text-xs">关闭</button>
                                     </div>
                                 </div>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+
+                <!-- 情绪曲线面板 -->
+                <template x-if="showEmotionCurve">
+                    <div class="mt-4 bg-white rounded-xl shadow-sm p-6 animate-fade-in">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-bold text-gray-900">📈 情绪曲线</h3>
+                            <div class="flex items-center gap-3">
+                                <!-- 粒度切换 -->
+                                <div class="flex bg-gray-100 rounded-lg p-1">
+                                    <button @click="emotionCurveGranularity = 'beat'"
+                                            :class="emotionCurveGranularity === 'beat' ? 'bg-white shadow-sm' : ''"
+                                            class="px-3 py-1 text-xs rounded-md transition-all">
+                                        Beat 级
+                                    </button>
+                                    <button @click="emotionCurveGranularity = 'scene'"
+                                            :class="emotionCurveGranularity === 'scene' ? 'bg-white shadow-sm' : ''"
+                                            class="px-3 py-1 text-xs rounded-md transition-all">
+                                        场景级
+                                    </button>
+                                </div>
+                                <button @click="toggleEmotionCurve()" class="text-gray-400 hover:text-gray-600">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 情绪曲线图表 -->
+                        <div class="relative h-64">
+                            <canvas id="emotionCurveChart"></canvas>
+                        </div>
+
+                        <!-- 情绪图例 -->
+                        <div class="mt-4 flex flex-wrap gap-3 text-xs text-gray-600">
+                            <div class="flex items-center gap-1">
+                                <div class="w-3 h-3 bg-green-500 rounded-full"></div>
+                                <span>高兴</span>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <div class="w-3 h-3 bg-blue-500 rounded-full"></div>
+                                <span>悲伤</span>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <div class="w-3 h-3 bg-red-500 rounded-full"></div>
+                                <span>愤怒</span>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <div class="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                                <span>平静</span>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <div class="w-3 h-3 bg-purple-500 rounded-full"></div>
+                                <span>兴奋</span>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <div class="w-3 h-3 bg-gray-500 rounded-full"></div>
+                                <span>恐惧</span>
+                            </div>
+                        </div>
+
+                        <!-- 当前选中点信息 -->
+                        <template x-if="selectedEmotionPoint">
+                            <div class="mt-4 p-3 bg-gray-50 rounded-lg text-sm">
+                                <div class="font-semibold text-gray-700 mb-1">选中位置：</div>
+                                <div class="text-gray-600">
+                                    <template x-if="selectedEmotionPoint.type === 'beat'">
+                                        <span>Beat #<span x-text="selectedEmotionPoint.index + 1"></span></span>
+                                    </template>
+                                    <template x-if="selectedEmotionPoint.type === 'scene'">
+                                        <span>场景 <span x-text="selectedEmotionPoint.sceneId"></span></span>
+                                    </template>
+                                    <span class="ml-2">情绪：<span x-text="selectedEmotionPoint.emotion"></span></span>
+                                    <span class="ml-2">强度：<span x-text="selectedEmotionPoint.intensity"></span>/5</span>
+                                </div>
+                                <button @click="scrollToEmotionPoint()" class="mt-2 btn-primary text-xs px-3 py-1">
+                                    定位到此处
+                                </button>
                             </div>
                         </template>
                     </div>
