@@ -30,7 +30,7 @@ class SourceLocation(BaseModel):
     model_config = {"extra": "forbid"}
 
     chapter_index: int = Field(..., description="章节序号（从 0 开始）")
-    start_paragraph: int = Field(..., description="起始段落索引（按双换行人切分）")
+    start_paragraph: int = Field(..., description="起始段落索引（按双换行切分）")
     end_paragraph: int = Field(..., description="结束段落索引")
     start_offset: int = Field(0, description="段落内起始字符偏移")
     end_offset: int = Field(0, description="段落内结束字符偏移")
@@ -134,6 +134,39 @@ class Scene(BaseModel):
     location: str = Field("", description="场景地点")
     time: str = Field("", description="场景时间")
     beats: list[Beat] = Field(default_factory=list, description="场景内的 Beat 列表")
+
+
+# ─────────────────────────────────────────────
+# 编辑元数据（编辑器状态）
+# ─────────────────────────────────────────────
+class EditMeta(BaseModel):
+    """编辑器元数据：保存用户编辑器的滚动位置、展开状态等"""
+
+    model_config = {"extra": "ignore"}
+
+    # 编辑器滚动位置
+    novel_scroll_top: float = Field(0.0, description="小说编辑器滚动位置")
+    script_scroll_top: float = Field(0.0, description="剧本编辑器滚动位置")
+
+    # 光标位置
+    novel_cursor_pos: int | None = Field(None, description="小说编辑器光标位置")
+    script_cursor_pos: int | None = Field(None, description="剧本编辑器光标位置")
+
+    # UI 状态
+    left_panel_visible: bool = Field(True, description="左面板是否可见")
+    right_panel_visible: bool = Field(True, description="右面板是否可见")
+    panel_ratio: float = Field(50.0, description="左右分栏比例（左侧占比%）")
+
+    # 当前激活的面板
+    active_panel: str = Field("novel", description="当前激活的面板（novel/script）")
+
+    # 展开/折叠状态
+    guide_expanded: bool = Field(True, description="使用指南是否展开")
+    version_panel_visible: bool = Field(False, description="版本历史面板是否可见")
+    skill_panel_visible: bool = Field(False, description="Skill 面板是否可见")
+
+    # 最后更新时间
+    last_updated: datetime | None = Field(None, description="最后更新时间")
 
 
 # ─────────────────────────────────────────────

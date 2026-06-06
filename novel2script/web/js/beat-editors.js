@@ -3,6 +3,7 @@
  *
  * 功能：点击剧本 YAML 中的 Beat → 弹出内联编辑器
  * 支持编辑：character、content、emotion
+ * 支持：类型切换、新增 Beat、删除 Beat
  *
  * 依赖：editor.js（CodeMirror 实例）、scroll-sync.js（解析 Beat 位置）
  */
@@ -10,7 +11,7 @@
 import { getContent, setContent } from "/js/editor.js";
 import { parseBeatsFromYaml } from "/js/scroll-sync.js";
 
-// ── Beat 编辑器管理器 ─────────────────────────────────────────────────────
+// ── Beat 编辑器管理器 ────────────────────────────────────────────────────
 
 class BeatEditorManager {
     constructor() {
@@ -42,25 +43,25 @@ class BeatEditorManager {
         if (!targetBeat) return;  // 点击位置不在 Beat 内
 
         this.activeBeatIdx = beatIdx;
-        this._showEditorPopup(scriptView, targetBeat, yamlText, onSave);
+        this._showEditorPopup(scriptView, targetBeat, beatIdx, beats.length, yamlText, onSave);
     }
 
     /**
-     * 显示编辑器弹出层
+     * 显示编辑器弹出层（支持 beatIdx 和 totalBeats）
      */
-    _showEditorPopup(scriptView, beat, yamlText, onSave) {
+    _showEditorPopup(scriptView, beat, beatIdx, totalBeats, yamlText, onSave) {
         // 关闭已有编辑器
         this.closeEditor();
 
         const popup = document.createElement("div");
         popup.className = "beat-editor-popup";
-        popup.innerHTML = this._renderEditorHTML(beat);
+        popup.innerHTML = this._renderEditorHTML(beat, beatIdx, totalBeats);
 
         document.body.appendChild(popup);
         this.activeEditor = popup;
 
-        // 绑定事件
-        this._bindEditorEvents(popup, scriptView, beat, yamlText, onSave);
+        // 绑定事件（传递 beatIdx 和 totalBeats）
+        this._bindEditorEvents(popup, scriptView, beat, beatIdx, totalBeats, onSave);
 
         // 点击外部关闭
         setTimeout(() => {
@@ -75,23 +76,38 @@ class BeatEditorManager {
     }
 
     /**
-     * 渲染编辑器 HTML
+     * 渲染编辑器 HTML（支持类型切换 + 新增/删除）
      */
-    _renderEditorHTML(beat) {
-        const typeLabel = {
+    _renderEditorHTML(beat, beatIdx, totalBeats) {
+        const typeLabelMap = {
             "dialogue": "对白",
             "action": "动作",
             "narration": "旁白",
             "heading": "标题",
             "transition": "转场",
-        }[beat.type] || beat.type;
+        };
+
+        // 类型选项
+        const typeOptions = ["dialogue", "action", "narration", "heading", "transition"]
+            .map(t => `<option value="${t}" ${t === beat.type ? "selected" : ""}>${typeLabelMap[t] || t}</option>`)
+            .join("");
 
         let html = `
         <div class="beat-editor-header">
-            <span class="beat-type-badge beat-type-${beat.type}">${typeLabel}</span>
-            <button class="beat-editor-close" title="关闭">&times;</button>
+            <span class="beat-type-badge beat-type-${beat.type}">${typeLabelMap[beat.type] || beat.type}</span>
+            <div class="flex gap-2">
+                <button class="beat-editor-btn beat-editor-delete" title="删除此 Beat">🗑 删除</button>
+                <button class="beat-editor-close" title="关闭">&times;</button>
+            </div>
         </div>
         <div class="beat-editor-body">
+            <!-- 类型切换 -->
+            <div class="beat-field">
+                <label>类型</label>
+                <select class="beat-input-type">
+                    ${typeOptions}
+                </select>
+            </div>
         `;
 
         // character（对话类型）
@@ -124,6 +140,14 @@ class BeatEditorManager {
             </div>
         `;
 
+        // 新增 Beat 按钮区域
+        html += `
+            <div class="beat-editor-actions">
+                <button class="beat-editor-btn beat-editor-add-above">⬆ 在上方新增</button>
+                <button class="beat-editor-btn beat-editor-add-below">⬇ 在下方新增</button>
+            </div>
+        `;
+
         html += `
         </div>
         <div class="beat-editor-footer">
@@ -136,9 +160,9 @@ class BeatEditorManager {
     }
 
     /**
-     * 绑定编辑器事件
+     * 绑定编辑器事件（支持类型切换 + 新增/删除）
      */
-    _bindEditorEvents(popup, scriptView, beat, yamlText, onSave) {
+    _bindEditorEvents(popup, scriptView, beat, beatIdx, totalBeats, onSave) {
         // 关闭按钮
         popup.querySelector(".beat-editor-close").addEventListener("click", () => {
             this.closeEditor();
@@ -149,14 +173,155 @@ class BeatEditorManager {
             this.closeEditor();
         });
 
-        // 保存按钮
+        // 删除按钮
+        const deleteBtn = popup.querySelector(".beat-editor-delete");
+        if (deleteBtn) {
+            deleteBtn.addEventListener("click", () => {
+                if (confirm("确认删除此 Beat？")) {
+                    const yamlText = getContent(scriptView);
+                    const updated = this._deleteBeat(yamlText, beat);
+                    if (onSave && updated) {
+                        onSave(updated);
+                    }
+                    this.closeEditor();
+                }
+            });
+        }
+
+        // 新增 Beat 按钮（上方）
+        const addAboveBtn = popup.querySelector(".beat-editor-add-above");
+        if (addAboveBtn) {
+            addAboveBtn.addEventListener("click", () => {
+                const yamlText = getContent(scriptView);
+                const updated = this._addBeat(yamlText, beatIdx, "above");
+                if (onSave && updated) {
+                    onSave(updated);
+                }
+                this.closeEditor();
+            });
+        }
+
+        // 新增 Beat 按钮（下方）
+        const addBelowBtn = popup.querySelector(".beat-editor-add-below");
+        if (addBelowBtn) {
+            addBelowBtn.addEventListener("click", () => {
+                const yamlText = getContent(scriptView);
+                const updated = this._addBeat(yamlText, beatIdx, "below");
+                if (onSave && updated) {
+                    onSave(updated);
+                }
+                this.closeEditor();
+            });
+        }
+
+        // 类型切换
+        const typeSelect = popup.querySelector(".beat-input-type");
+        if (typeSelect) {
+            typeSelect.addEventListener("change", (e) => {
+                const yamlText = getContent(scriptView);
+                const newType = e.target.value;
+                const updated = this._changeBeatType(yamlText, beat, newType);
+                if (onSave && updated) {
+                    onSave(updated);
+                }
+                this.closeEditor();
+            });
+        }
+
+        // 保存按钮（普通字段更新）
         popup.querySelector(".beat-editor-save").addEventListener("click", () => {
+            const yamlText = getContent(scriptView);
             const updated = this._collectUpdates(popup, beat, yamlText);
             if (onSave && updated) {
                 onSave(updated);
             }
             this.closeEditor();
         });
+    }
+
+    /**
+     * 删除指定 Beat
+     */
+    _deleteBeat(yamlText, beat) {
+        const lines = yamlText.split("\n");
+        const { lineStart, lineEnd } = beat;
+
+        // 删除 Beat 对应的行（包括前后的空行）
+        let start = lineStart;
+        let end = lineEnd;
+
+        // 向前删除空行
+        while (start > 0 && lines[start - 1].trim() === "") {
+            start--;
+        }
+
+        // 向后删除空行
+        while (end < lines.length - 1 && lines[end + 1].trim() === "") {
+            end++;
+        }
+
+        lines.splice(start, end - start + 1);
+        return lines.join("\n");
+    }
+
+    /**
+     * 在指定位置新增 Beat
+     * @param {string} position - "above" 或 "below"
+     */
+    _addBeat(yamlText, beatIdx, position) {
+        const lines = yamlText.split("\n");
+
+        // 构造新 Beat 的 YAML 文本
+        const newBeatLines = [
+            "",
+            "  - type: dialogue",
+            "    character: 新角色",
+            "    content: 新对白",
+            "    emotion: ",
+            "    source_location:",
+            "      source_start: 0",
+            "      source_end: 0",
+        ];
+
+        // 找到插入位置
+        const currentBeat = this._getBeatByIndex(yamlText, beatIdx);
+        if (!currentBeat) return yamlText;
+
+        if (position === "above") {
+            // 在当前 Beat 之前插入
+            lines.splice(currentBeat.lineStart, 0, ...newBeatLines);
+        } else {
+            // 在当前 Beat 之后插入
+            lines.splice(currentBeat.lineEnd + 1, 0, ...newBeatLines);
+        }
+
+        return lines.join("\n");
+    }
+
+    /**
+     * 根据索引获取 Beat 信息（简化版，直接从 YAML 解析）
+     */
+    _getBeatByIndex(yamlText, idx) {
+        const beats = parseBeatsFromYaml(yamlText);
+        return beats[idx] || null;
+    }
+
+    /**
+     * 切换 Beat 类型
+     */
+    _changeBeatType(yamlText, beat, newType) {
+        const lines = yamlText.split("\n");
+        const { lineStart, lineEnd } = beat;
+
+        // 更新 type 字段
+        for (let i = lineStart; i <= lineEnd && i < lines.length; i++) {
+            if (lines[i].includes("type:")) {
+                lines[i] = lines[i].replace(/type:\s*\w+/, `type: ${newType}`);
+                break;
+            }
+        }
+
+        return lines.join("\n");
     }
 
     /**
@@ -289,8 +454,8 @@ export default beatEditorManager;
 
 /**
  * 在剧本编辑器中启用 Beat 点击编辑
- * @param {EditorView} scriptView 
- * @param {EditorView} novelView 
+ * @param {EditorView} scriptView
+ * @param {EditorView} novelView
  * @param {function} onSave - 保存回调
  */
 export function enableBeatEditing(scriptView, novelView, onSave) {

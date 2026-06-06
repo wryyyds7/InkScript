@@ -236,36 +236,61 @@ def run_skill(
     builtin_dir: tuple[Path, Path] = Depends(get_skills_dir),
 ):
     """运行 Skill"""
+    import sys
+    import importlib.util
+
     builtin_dir, user_dir = builtin_dir
 
     # 查找 Skill
     skill_dir = None
-    for d in [builtin_dir, user_dir]:
+    skill_source = None
+    for d, source in [(builtin_dir, "builtin"), (user_dir, "user")]:
         if (d / skill_name).exists():
             skill_dir = d / skill_name
+            skill_source = source
             break
 
     if not skill_dir:
         raise HTTPException(status_code=404, detail="Skill 不存在")
 
-    # 读取 SKILL.md
-    skill_md_file = skill_dir / "SKILL.md"
-    if not skill_md_file.exists():
-        raise HTTPException(status_code=400, detail="Skill 缺少 SKILL.md 文件")
+    # 检查是否有 main.py
+    main_py = skill_dir / "main.py"
+    if not main_py.exists():
+        raise HTTPException(status_code=400, detail="Skill 缺少 main.py 文件")
 
-    skill_content = skill_md_file.read_text(encoding="utf-8")
+    try:
+        # 动态加载 main.py
+        spec = importlib.util.spec_from_file_location(f"skill_{skill_name}", main_py)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
 
-    # TODO: 实际运行 Skill（调用 LLM）
-    # 这里先返回模拟结果
-    return {
-        "code": 0,
-        "data": {
-            "skill_name": skill_name,
-            "input": body.get("input", ""),
-            "output": "Skill 运行结果（待实现）",
-            "status": "pending"
+        # 检查是否有 run 函数
+        if not hasattr(module, "run"):
+            raise HTTPException(status_code=400, detail="Skill 的 main.py 缺少 run() 函数")
+
+        # 准备配置（注入 LLM 客户端）
+        from novel2script.llm_client import OpenAIClient
+        llm_client = OpenAIClient()
+
+        config = {
+            "llm_client": llm_client
         }
-    }
+
+        # 调用 run 函数
+        result = module.run(body, config)
+
+        return {
+            "code": 0,
+            "data": {
+                "skill_name": skill_name,
+                "result": result
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Skill 运行失败: {str(e)}")
 
 
 @router.get("/{skill_name}/errors")
@@ -331,6 +356,57 @@ description: {body.description}
     )
 
     return {"code": 0, "message": "Skill 创建成功", "data": {"id": body.name}}
+
+
+@router.post("/install")
+def install_skill(
+    body: dict,
+    builtin_dir: tuple[Path, Path] = Depends(get_skills_dir),
+):
+    """从本地路径安装 Skill"""
+    _, user_dir = builtin_dir
+
+    path = body.get("path", "")
+    if not path:
+        raise HTTPException(status_code=400, detail="缺少 path 参数")
+
+    import shutil
+    from pathlib import Path as PathObj
+    src_path = PathObj(path)
+    if not src_path.exists():
+        raise HTTPException(status_code=404, detail="路径不存在")
+
+    # 读取 Skill 元数据
+    metadata_file = src_path / "metadata.json"
+    skill_md_file = src_path / "SKILL.md"
+
+    if metadata_file.exists():
+        metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
+    elif skill_md_file.exists():
+        # 从 SKILL.md 解析元数据
+        content = skill_md_file.read_text(encoding="utf-8")
+        if content.startswith("---"):
+            import yaml
+            try:
+                yaml_str = content.split("---", 2)[1]
+                metadata = yaml.safe_load(yaml_str)
+            except Exception:
+                metadata = {}
+        else:
+            metadata = {}
+    else:
+        raise HTTPException(status_code=400, detail="Skill 缺少 metadata.json 或 SKILL.md 文件")
+
+    skill_name = metadata.get("name", src_path.name)
+    dest_dir = user_dir / skill_name
+
+    if dest_dir.exists():
+        raise HTTPException(status_code=400, detail="Skill 已存在")
+
+    # 复制 Skill 目录
+    shutil.copytree(src_path, dest_dir)
+
+    return {"code": 0, "message": "Skill 安装成功", "data": {"id": skill_name}}
 
 
 @router.delete("/{skill_name}")

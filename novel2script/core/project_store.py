@@ -49,6 +49,10 @@ class FileSystemProjectStore:
     def _script_path(self, project_id: str) -> Path:
         return self._project_path(project_id) / "script.yaml"
 
+    def _edit_meta_path(self, project_id: str) -> Path:
+        """返回 edit_meta.json 路径"""
+        return self._project_path(project_id) / "edit_meta.json"
+
     def _versions_dir(self, project_id: str) -> Path:
         return self._project_path(project_id) / "versions"
 
@@ -416,3 +420,36 @@ class FileSystemProjectStore:
         if not p.exists():
             return None
         return from_yaml(p.read_text(encoding="utf-8"))
+
+    # ── EditMeta 读写 ──────────────────────
+    def save_edit_meta(self, project_id: str, edit_meta: dict) -> None:
+        """保存编辑器元数据"""
+        import json
+        from datetime import datetime
+
+        edit_meta["last_updated"] = datetime.now().isoformat()
+        self._edit_meta_path(project_id).write_text(
+            json.dumps(edit_meta, ensure_ascii=False, indent=2),
+            encoding="utf-8"
+        )
+
+    def load_edit_meta(self, project_id: str) -> dict:
+        """加载编辑器元数据（返回字典，如果不存在则返回默认值）"""
+        import json
+        from novel2script.schema import EditMeta
+
+        p = self._edit_meta_path(project_id)
+        if not p.exists():
+            # 返回默认元数据
+            default_meta = EditMeta()
+            return json.loads(default_meta.model_dump_json(ensure_ascii=False))
+
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+            # 验证数据
+            validated = EditMeta(**data)
+            return json.loads(validated.model_dump_json(ensure_ascii=False))
+        except Exception:
+            # 如果数据无效，返回默认值
+            default_meta = EditMeta()
+            return json.loads(default_meta.model_dump_json(ensure_ascii=False))

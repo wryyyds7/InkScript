@@ -333,3 +333,37 @@ def save_config_snapshot(
     
     return {"code": 0, "message": "配置快照已保存"}
 
+
+# ── EditMeta API ─────────────────────
+@router.get("/{project_id}/edit-meta")
+def get_edit_meta(
+    project_id: str,
+    store: FileSystemProjectStore = Depends(get_store),
+):
+    """获取项目编辑器元数据"""
+    meta = store.get_project(project_id)
+    if not meta:
+        raise HTTPException(status_code=404, detail="项目不存在")
+    
+    edit_meta = store.load_edit_meta(project_id)
+    return {"code": 0, "data": edit_meta}
+
+
+@router.put("/{project_id}/edit-meta")
+def update_edit_meta(
+    project_id: str,
+    body: dict,
+    store: FileSystemProjectStore = Depends(get_store),
+):
+    """更新项目编辑器元数据"""
+    meta = store.get_project(project_id)
+    if not meta:
+        raise HTTPException(status_code=404, detail="项目不存在")
+    
+    # 合并更新（只更新 body 中提供的字段）
+    current_meta = store.load_edit_meta(project_id)
+    current_meta.update(body)
+    
+    store.save_edit_meta(project_id, current_meta)
+    return {"code": 0, "message": "编辑器元数据已更新", "data": current_meta}
+

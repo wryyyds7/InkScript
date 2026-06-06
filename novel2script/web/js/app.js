@@ -73,6 +73,9 @@ function app() {
         _dragStartWidth: 0,       // 拖拽起始宽度
         _isDragging: false,        // 是否正在拖拽
 
+        // 使用指南折叠
+        showGuide: true,           // 是否显示使用指南
+
         // ── 提供商默认配置 ─────────────────
         providers: {
             openai: {
@@ -135,6 +138,7 @@ function app() {
         init() {
             this.loadProjects();
             this.loadConfig();
+            this._loadGuideState();  // 初始化使用指南状态
             this._initKeyboardShortcuts();
         },
 
@@ -207,6 +211,31 @@ function app() {
             return this.providers[this.config.provider]?.modelHint || '';
         },
 
+        // ── 编辑器辅助功能 ─────────────────
+        
+        /** 切换使用指南显示/隐藏 */
+        toggleGuide() {
+            this.showGuide = !this.showGuide;
+            // 保存状态到 localStorage
+            try {
+                localStorage.setItem('inkscript_show_guide', this.showGuide ? '1' : '0');
+            } catch (e) {
+                // localStorage 不可用时忽略
+            }
+        },
+        
+        /** 初始化时读取使用指南状态 */
+        _loadGuideState() {
+            try {
+                const saved = localStorage.getItem('inkscript_show_guide');
+                if (saved !== null) {
+                    this.showGuide = saved === '1';
+                }
+            } catch (e) {
+                // localStorage 不可用时忽略
+            }
+        },
+
         // ── 项目管理 ─────────────────────
         async loadProjects() {
             const params = new URLSearchParams();
@@ -263,6 +292,8 @@ function app() {
                 this.view = 'editor';
                 await this.loadNovel();
                 await this.loadScript();
+                // 加载编辑器元数据（恢复滚动位置、面板状态等）
+                await this.loadEditMeta();
             }
         },
 
@@ -382,27 +413,6 @@ function app() {
                 }
             } catch (e) {
                 alert('更新失败: ' + e.message);
-            }
-        },
-
-        async runSkill(skill) {
-            const input = prompt('请输入 Skill 的输入内容:');
-            if (!input) return;
-
-            try {
-                const res = await fetch(`/api/v1/skills/${skill.id}/run`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ input: input })
-                });
-                const data = await res.json();
-                if (data.code === 0) {
-                    alert('Skill 运行结果:\n\n' + JSON.stringify(data.data, null, 2));
-                } else {
-                    alert('运行失败: ' + data.message);
-                }
-            } catch (e) {
-                alert('运行失败: ' + e.message);
             }
         },
 
@@ -587,6 +597,40 @@ function app() {
             this._onDragEnd = null;
         },
 
+        // ── 分栏折叠 ────────────────────
+
+        /** 左栏是否全屏 */
+        get isLeftPanelFullscreen() {
+            return this.leftPanelWidth >= 99;
+        },
+
+        /** 右栏是否全屏 */
+        get isRightPanelFullscreen() {
+            return this.leftPanelWidth <= 1;
+        },
+
+        /** 切换左栏全屏（折叠右栏） */
+        toggleLeftPanel() {
+            if (this.isLeftPanelFullscreen) {
+                // 恢复之前的比例（默认 50:50）
+                this.leftPanelWidth = 50;
+            } else {
+                // 左栏全屏
+                this.leftPanelWidth = 99;
+            }
+        },
+
+        /** 切换右栏全屏（折叠左栏） */
+        toggleRightPanel() {
+            if (this.isRightPanelFullscreen) {
+                // 恢复之前的比例（默认 50:50）
+                this.leftPanelWidth = 50;
+            } else {
+                // 右栏全屏
+                this.leftPanelWidth = 1;
+            }
+        },
+
         // ── 编辑器 ─────────────────────
 
         /** 初始化 CodeMirror 6 编辑器（editor 视图挂载后调用） */
@@ -725,6 +769,54 @@ function app() {
             return cn + en;
         },
 
+        // ── 撤销/重做 ─────────────────────
+
+        /** 获取当前获得焦点的编辑器 */
+        _getFocusedEditor() {
+            if (this.scriptEditor && this.scriptEditor.hasFocus) return 'script';
+            if (this.novelEditor && this.novelEditor.hasFocus) return 'novel';
+            return 'script'; // 默认操作剧本编辑器
+        },
+
+        /** 撤销 */
+        async undo() {
+            const editorType = this._getFocusedEditor();
+            const editor = editorType === 'novel' ? this.novelEditor : this.scriptEditor;
+            if (!editor) return;
+            try {
+                const { undo } = await import('@codemirror/commands');
+                undo(editor);
+                this.showToast('已撤销');
+            } catch (e) {
+                console.error('撤销失败:', e);
+            }
+        },
+
+        /** 重做 */
+        async redo() {
+            const editorType = this._getFocusedEditor();
+            const editor = editorType === 'novel' ? this.novelEditor : this.scriptEditor;
+            if (!editor) return;
+            try {
+                const { redo } = await import('@codemirror/commands');
+                redo(editor);
+                this.showToast('已重做');
+            } catch (e) {
+                console.error('重做失败:', e);
+            }
+        },
+
+        /** 检查当前编辑器是否可以撤销 */
+        get canUndo() {
+            // Alpine.js 不支持复杂的 getter，用方法代替
+            return false;
+        },
+
+        /** 检查当前编辑器是否可以重做 */
+        get canRedo() {
+            return false;
+        },
+
         async loadNovel() {
             if (!this.activeProject) return;
             const res = await fetch(`/api/v1/projects/${this.activeProject.id}/novel`);
@@ -750,6 +842,8 @@ function app() {
                 body: JSON.stringify({ content }),
             });
             this.showToast('小说已保存');
+            // 保存编辑器元数据
+            await this.saveEditMeta();
         },
 
         /** 自动保存防抖（2 秒） */
@@ -861,6 +955,8 @@ function app() {
                 body: JSON.stringify({ yaml }),
             });
             this.showToast('剧本已保存');
+            // 保存编辑器元数据
+            await this.saveEditMeta();
         },
 
         /** 自动保存防抖（2 秒） */
@@ -1020,64 +1116,27 @@ function app() {
             }
         },
 
-        /** 创建新 Skill（生成模板） */
-        createSkill() {
-            const name = prompt('请输入 Skill 名称（小写英文字母+连字符）:');
-            if (!name) return;
-            
-            const type = prompt('请输入 Skill 类型（pre_processor/post_processor/exporter/analyzer）:', 'post_processor');
-            if (!type) return;
-
-            const description = prompt('请输入 Skill 描述:', '我的自定义 Skill');
-            if (!description) return;
-
-            // 调用后端 API 创建 Skill
-            fetch('/api/v1/skills', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    name,
-                    type,
-                    description,
-                    author: '用户',
-                }),
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.code === 0) {
-                    this.showToast(`Skill "${name}" 创建成功！`);
-                    this.loadSkills();
-                } else {
-                    alert('创建失败: ' + data.message);
-                }
-            })
-            .catch(e => {
-                alert('创建失败: ' + e.message);
-            });
-        },
-
         /** 安装 Skill（从本地路径） */
-        installSkill() {
-            const path = prompt('请输入 Skill 目录路径（含 skill.json 和 main.py）:');
+        async installSkill() {
+            const path = prompt('请输入 Skill 目录路径（含 metadata.json 或 SKILL.md）:');
             if (!path) return;
 
-            fetch('/api/v1/skills/install', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path }),
-            })
-            .then(res => res.json())
-            .then(data => {
+            try {
+                const res = await fetch('/api/v1/skills/install', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path }),
+                });
+                const data = await res.json();
                 if (data.code === 0) {
                     this.showToast(`Skill 安装成功！`);
-                    this.loadSkills();
+                    await this.loadSkills();
                 } else {
                     alert('安装失败: ' + data.message);
                 }
-            })
-            .catch(e => {
+            } catch (e) {
                 alert('安装失败: ' + e.message);
-            });
+            }
         },
 
         // ── 配置快照功能 ─────────────────────
@@ -1181,6 +1240,33 @@ function app() {
             }
         },
 
+        // ── 配置快照查看 ────────────────────
+
+        /** 查看项目配置快照 */
+        async viewConfigSnapshot() {
+            if (!this.activeProject) return;
+
+            try {
+                const res = await fetch(`/api/v1/projects/${this.activeProject.id}/config-snapshot`);
+                const data = await res.json();
+                if (data.code === 0) {
+                    // 显示配置快照（弹窗或侧边栏）
+                    const config = data.data;
+                    let message = '项目配置快照：\n\n';
+                    message += `提供商: ${config.provider || '未设置'}\n`;
+                    message += `模型: ${config.model_name || '未设置'}\n`;
+                    message += `温度: ${config.temperature ?? '未设置'}\n`;
+                    message += `Max Tokens: ${config.max_tokens || '未设置'}\n`;
+                    message += `Base URL: ${config.base_url || '默认'}\n`;
+                    alert(message);
+                } else {
+                    alert('获取配置快照失败: ' + data.message);
+                }
+            } catch (e) {
+                alert('获取配置快照失败: ' + e.message);
+            }
+        },
+
         // ── 工具方法 ─────────────────────
         showToast(message) {
             const toast = document.createElement('div');
@@ -1192,5 +1278,85 @@ function app() {
                 setTimeout(() => toast.remove(), 300);
             }, 2000);
         },
+
+        // ── EditMeta 编辑器元数据 ─────────────────────
+        /** 保存编辑器元数据 */
+        async saveEditMeta() {
+            if (!this.activeProject) return;
+
+            // 收集当前编辑器状态
+            const meta = {
+                novel_scroll_top: this.novelEditor ? this.novelEditor.scrollDOM ? this.novelEditor.scrollDOM.scrollTop : 0 : 0,
+                script_scroll_top: this.scriptEditor ? this.scriptEditor.scrollDOM ? this.scriptEditor.scrollDOM.scrollTop : 0 : 0,
+                left_panel_visible: this.leftPanelVisible !== false,
+                right_panel_visible: this.rightPanelVisible !== false,
+                panel_ratio: this.panelRatio || 50,
+                guide_expanded: this.guideExpanded !== false,
+                version_panel_visible: this.showVersionPanel === true,
+                skill_panel_visible: this.showSkillPanel === true,
+            };
+
+            try {
+                await fetch(`/api/v1/projects/${this.activeProject.id}/edit-meta`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(meta),
+                });
+            } catch (e) {
+                console.error('保存编辑器元数据失败:', e);
+            }
+        },
+
+        /** 加载编辑器元数据 */
+        async loadEditMeta() {
+            if (!this.activeProject) return;
+
+            try {
+                const res = await fetch(`/api/v1/projects/${this.activeProject.id}/edit-meta`);
+                const data = await res.json();
+                if (data.code === 0) {
+                    const meta = data.data;
+                    // 恢复面板状态
+                    if (this.leftPanelVisible !== undefined) this.leftPanelVisible = meta.left_panel_visible !== false;
+                    if (this.rightPanelVisible !== undefined) this.rightPanelVisible = meta.right_panel_visible !== false;
+                    if (this.panelRatio !== undefined) this.panelRatio = meta.panel_ratio || 50;
+                    if (this.guideExpanded !== undefined) this.guideExpanded = meta.guide_expanded !== false;
+
+                    // 恢复滚动位置（延迟执行，等编辑器初始化完成）
+                    setTimeout(() => {
+                        if (this.novelEditor && this.novelEditor.scrollDOM && meta.novel_scroll_top) {
+                            this.novelEditor.scrollDOM.scrollTop = meta.novel_scroll_top;
+                        }
+                        if (this.scriptEditor && this.scriptEditor.scrollDOM && meta.script_scroll_top) {
+                            this.scriptEditor.scrollDOM.scrollTop = meta.script_scroll_top;
+                        }
+                    }, 500);
+                }
+            } catch (e) {
+                console.error('加载编辑器元数据失败:', e);
+            }
+        },
+
+        /** 在页面卸载前保存元数据 */
+        setupBeforeUnload() {
+            window.addEventListener('beforeunload', () => {
+                this.saveEditMeta();
+            });
+        },
     };
 }
+
+// 页面加载完成后，初始化元数据保存
+document.addEventListener('alpine:init', () => {
+    // Alpine 初始化后，获取组件实例并加载元数据
+    setTimeout(() => {
+        const appComponent = Alpine.$data(document.body);
+        if (appComponent && appComponent.loadEditMeta) {
+            // 延迟加载，等项目加载完成
+            setTimeout(() => {
+                appComponent.loadEditMeta();
+                appComponent.setupBeforeUnload();
+            }, 1000);
+        }
+    }, 500);
+});
