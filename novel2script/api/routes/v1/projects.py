@@ -345,6 +345,58 @@ def get_config_snapshot(
     return {"code": 0, "data": config_data}
 
 
+# ── 操作日志 API（逐句修改历史）────────────────────
+@router.get("/{project_id}/operations")
+def list_operations(
+    project_id: str,
+    store: FileSystemProjectStore = Depends(get_store),
+):
+    """获取项目的操作日志列表"""
+    # 检查项目是否存在
+    if not store.get_project(project_id):
+        raise HTTPException(status_code=404, detail="项目不存在")
+    
+    operations = store.load_operations(project_id)
+    return {"code": 0, "data": operations}
+
+
+@router.post("/{project_id}/operations")
+def add_operation(
+    project_id: str,
+    body: dict,
+    store: FileSystemProjectStore = Depends(get_store),
+):
+    """添加一条操作日志"""
+    # 检查项目是否存在
+    if not store.get_project(project_id):
+        raise HTTPException(status_code=404, detail="项目不存在")
+    
+    # 保存操作日志
+    success = store.save_operation_log(project_id, body)
+    if not success:
+        raise HTTPException(status_code=500, detail="保存操作日志失败")
+    
+    return {"code": 0, "message": "操作日志已保存"}
+
+
+@router.delete("/{project_id}/operations")
+def clear_operations(
+    project_id: str,
+    store: FileSystemProjectStore = Depends(get_store),
+):
+    """清空项目的操作日志"""
+    # 检查项目是否存在
+    if not store.get_project(project_id):
+        raise HTTPException(status_code=404, detail="项目不存在")
+    
+    # 清空操作日志
+    edit_meta = store.load_edit_meta(project_id)
+    edit_meta["operation_log"] = []
+    store.save_edit_meta(project_id, edit_meta)
+    
+    return {"code": 0, "message": "操作日志已清空"}
+
+
 @router.post("/{project_id}/config-snapshot")
 def save_config_snapshot(
     project_id: str,

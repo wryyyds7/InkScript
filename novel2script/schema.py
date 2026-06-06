@@ -139,6 +139,21 @@ class Scene(BaseModel):
 # ─────────────────────────────────────────────
 # 编辑元数据（编辑器状态）
 # ─────────────────────────────────────────────
+class OperationLog(BaseModel):
+    """操作日志：记录每次编辑操作（用于逐句修改历史）"""
+
+    model_config = {"extra": "forbid"}
+
+    timestamp: datetime = Field(default_factory=datetime.utcnow, description="操作时间")
+    user: str = Field("user", description="操作用户（预留多人协作）")
+    action: str = Field(..., description="操作类型：create_beat | update_beat | delete_beat | update_novel")
+    beat_id: str | None = Field(None, description="关联的 Beat ID（如果是 Beat 操作）")
+    field: str | None = Field(None, description="修改的字段名（如 character, content, emotion）")
+    old_value: str | None = Field(None, description="修改前的值")
+    new_value: str | None = Field(None, description="修改后的值")
+    scene_id: str | None = Field(None, description="关联的场景 ID")
+
+
 class EditMeta(BaseModel):
     """编辑器元数据：保存用户编辑器的滚动位置、展开状态等"""
 
@@ -164,6 +179,9 @@ class EditMeta(BaseModel):
     guide_expanded: bool = Field(True, description="使用指南是否展开")
     version_panel_visible: bool = Field(False, description="版本历史面板是否可见")
     skill_panel_visible: bool = Field(False, description="Skill 面板是否可见")
+
+    # 操作日志（逐句修改历史）
+    operation_log: list[OperationLog] = Field(default_factory=list, description="操作日志列表")
 
     # 最后更新时间
     last_updated: datetime | None = Field(None, description="最后更新时间")

@@ -58,10 +58,16 @@ function app() {
         newSkillDescription: '', // 新 Skill 描述
         newSkillPrompt: '',     // 新 Skill Prompt 模板
 
-        // 版本历史
+        // 版本历史（快照）
         showVersionPanel: false,  // 是否显示版本历史面板
         versions: [],            // 版本列表
         currentVersion: null,    // 当前查看的版本详情
+
+        // 操作日志（逐句修改历史）
+        showOperationLog: false,  // 是否显示操作日志面板
+        operations: [],           // 操作日志列表
+        currentOperation: null,   // 当前查看的操作详情
+        operationFilter: 'all',  // 操作过滤器：all|create_beat|update_beat|delete_beat|update_novel
 
         // 回收站
         showTrash: false,        // 是否显示回收站
@@ -140,6 +146,26 @@ function app() {
             this.loadConfig();
             this._loadGuideState();  // 初始化使用指南状态
             this._initKeyboardShortcuts();
+            this._initOperationLogListener();  // 初始化操作日志监听
+        },
+
+        // ── 操作日志事件监听 ────────────────────
+        _initOperationLogListener() {
+            // 监听 Beat 操作事件
+            window.addEventListener('beat-operation', (event) => {
+                if (!this.activeProject) return;
+
+                const { action, beatId, field, oldValue, newValue, sceneId } = event.detail;
+
+                // 调用 logOperation 方法记录操作
+                this.logOperation(action, {
+                    beatId: beatId,
+                    field: field,
+                    oldValue: oldValue,
+                    newValue: newValue,
+                    sceneId: sceneId
+                });
+            });
         },
 
         // ── 快捷键系统 ────────────────────
@@ -1360,6 +1386,122 @@ function app() {
                 }
             } catch (e) {
                 alert('回滚失败: ' + e.message);
+            }
+        },
+
+        // ── 操作日志功能（逐句修改历史）─────────────────────
+        async toggleOperationLog() {
+            this.showOperationLog = !this.showOperationLog;
+            if (this.showOperationLog && this.activeProject) {
+                await this.loadOperations();
+            }
+        },
+
+        async loadOperations() {
+            if (!this.activeProject) return;
+            
+            try {
+                const res = await fetch(`/api/v1/projects/${this.activeProject.id}/operations`);
+                const data = await res.json();
+                if (data.code === 0) {
+                    this.operations = data.data || [];
+                }
+            } catch (e) {
+                console.error('加载操作日志失败:', e);
+            }
+        },
+
+        /** 根据过滤器筛选操作日志 */
+        get filteredOperations() {
+            if (this.operationFilter === 'all') {
+                return this.operations;
+            }
+            return this.operations.filter(op => op.action === this.operationFilter);
+        },
+
+        /** 格式化操作类型 */
+        formatAction(action) {
+            const actionMap = {
+                'create_beat': '创建 Beat',
+                'update_beat': '更新 Beat',
+                'delete_beat': '删除 Beat',
+                'update_novel': '更新小说'
+            };
+            return actionMap[action] || action;
+        },
+
+        /** 格式化时间戳 */
+        formatTimestamp(timestamp) {
+            if (!timestamp) return '';
+            const date = new Date(timestamp);
+            return date.toLocaleString('zh-CN', {
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        },
+
+        /** 查看操作详情 */
+        viewOperation(operation) {
+            this.currentOperation = operation;
+        },
+
+        /** 关闭操作详情 */
+        closeOperationDetail() {
+            this.currentOperation = null;
+        },
+
+        /** 回滚到某次操作 */
+        async rollbackToOperation(operationIndex) {
+            if (!this.activeProject) return;
+            
+            if (!confirm(`确认回滚到该操作？之后的操作将被撤销，此操作不可撤销。`)) {
+                return;
+            }
+            
+            try {
+                // 获取该操作之前的所有操作
+                const operationsToKeep = this.operations.slice(0, operationIndex + 1);
+                
+                // 清空操作日志
+                await fetch(`/api/v1/projects/${this.activeProject.id}/operations`, {
+                    method: 'DELETE'
+                });
+                
+                // 重新应用操作（这里需要后端支持，暂时先清空）
+                this.showToast('回滚功能需要后端支持，正在开发中');
+                
+                // 重新加载操作日志
+                await this.loadOperations();
+            } catch (e) {
+                alert('回滚失败: ' + e.message);
+            }
+        },
+
+        /** 记录操作日志 */
+        async logOperation(action, details) {
+            if (!this.activeProject) return;
+            
+            const operation = {
+                action: action,
+                beat_id: details.beatId || null,
+                field: details.field || null,
+                old_value: details.oldValue || null,
+                new_value: details.newValue || null,
+                scene_id: details.sceneId || null,
+                timestamp: new Date().toISOString()
+            };
+            
+            try {
+                await fetch(`/api/v1/projects/${this.activeProject.id}/operations`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(operation)
+                });
+            } catch (e) {
+                console.error('记录操作日志失败:', e);
             }
         },
 

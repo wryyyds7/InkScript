@@ -20,6 +20,29 @@ class BeatEditorManager {
     }
 
     /**
+     * 派发操作日志事件
+     * @param {string} action - 操作类型：create_beat | update_beat | delete_beat
+     * @param {object} beat - 相关的 Beat 数据
+     * @param {string} field - 修改的字段（可选）
+     * @param {string} oldValue - 修改前的值（可选）
+     * @param {string} newValue - 修改后的值（可选）
+     */
+    _dispatchOperationEvent(action, beat, field = null, oldValue = null, newValue = null) {
+        const event = new CustomEvent('beat-operation', {
+            detail: {
+                action: action,
+                beatId: beat ? beat.id : null,
+                field: field,
+                oldValue: oldValue,
+                newValue: newValue,
+                sceneId: beat ? beat.scene_id : null,
+                timestamp: new Date().toISOString()
+            }
+        });
+        window.dispatchEvent(event);
+    }
+
+    /**
      * 在指定位置弹出 Beat 编辑器
      * @param {EditorView} scriptView - 剧本编辑器实例
      * @param {number} yamlLine - 点击位置的行号（0-based）
@@ -183,6 +206,8 @@ class BeatEditorManager {
                     if (onSave && updated) {
                         onSave(updated);
                     }
+                    // 派发删除操作事件
+                    this._dispatchOperationEvent('delete_beat', beat, null, null);
                     this.closeEditor();
                 }
             });
@@ -197,6 +222,8 @@ class BeatEditorManager {
                 if (onSave && updated) {
                     onSave(updated);
                 }
+                // 派发创建操作事件
+                this._dispatchOperationEvent('create_beat', beat, null, null, 'new_beat_above');
                 this.closeEditor();
             });
         }
@@ -210,6 +237,8 @@ class BeatEditorManager {
                 if (onSave && updated) {
                     onSave(updated);
                 }
+                // 派发创建操作事件
+                this._dispatchOperationEvent('create_beat', beat, null, null, 'new_beat_below');
                 this.closeEditor();
             });
         }
@@ -219,11 +248,14 @@ class BeatEditorManager {
         if (typeSelect) {
             typeSelect.addEventListener("change", (e) => {
                 const yamlText = getContent(scriptView);
+                const oldType = beat.type;
                 const newType = e.target.value;
                 const updated = this._changeBeatType(yamlText, beat, newType);
                 if (onSave && updated) {
                     onSave(updated);
                 }
+                // 派发类型更新操作事件
+                this._dispatchOperationEvent('update_beat', beat, 'type', oldType, newType);
                 this.closeEditor();
             });
         }
@@ -231,10 +263,38 @@ class BeatEditorManager {
         // 保存按钮（普通字段更新）
         popup.querySelector(".beat-editor-save").addEventListener("click", () => {
             const yamlText = getContent(scriptView);
+
+            // 捕获旧值
+            const oldCharacter = beat.character || '';
+            const oldEmotion = beat.emotion || '';
+            const oldContent = beat.content || '';
+
             const updated = this._collectUpdates(popup, beat, yamlText);
+
+            // 捕获新值
+            const characterInput = popup.querySelector(".beat-input-character");
+            const emotionInput = popup.querySelector(".beat-input-emotion");
+            const contentInput = popup.querySelector(".beat-input-content");
+
+            const newCharacter = characterInput ? characterInput.value.trim() : oldCharacter;
+            const newEmotion = emotionInput ? emotionInput.value : oldEmotion;
+            const newContent = contentInput ? contentInput.value : oldContent;
+
             if (onSave && updated) {
                 onSave(updated);
             }
+
+            // 派发更新操作事件（只记录实际修改的字段）
+            if (newCharacter !== oldCharacter) {
+                this._dispatchOperationEvent('update_beat', beat, 'character', oldCharacter, newCharacter);
+            }
+            if (newEmotion !== oldEmotion) {
+                this._dispatchOperationEvent('update_beat', beat, 'emotion', oldEmotion, newEmotion);
+            }
+            if (newContent !== oldContent) {
+                this._dispatchOperationEvent('update_beat', beat, 'content', oldContent, newContent);
+            }
+
             this.closeEditor();
         });
     }

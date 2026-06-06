@@ -470,6 +470,45 @@ class FileSystemProjectStore:
             encoding="utf-8"
         )
 
+    def save_operation_log(self, project_id: str, operation: dict) -> None:
+        """保存操作日志到 EditMeta"""
+        import json
+        from novel2script.schema import OperationLog, EditMeta
+        
+        # 加载当前 EditMeta
+        edit_meta_dict = self.load_edit_meta(project_id)
+        
+        # 创建 OperationLog 对象并验证
+        try:
+            op_log = OperationLog(**operation)
+            op_dict = json.loads(op_log.model_dump_json(ensure_ascii=False))
+            
+            # 添加到 operation_log 列表
+            if "operation_log" not in edit_meta_dict:
+                edit_meta_dict["operation_log"] = []
+            
+            edit_meta_dict["operation_log"].append(op_dict)
+            
+            # 保存回文件
+            self.save_edit_meta(project_id, edit_meta_dict)
+            return True
+        except Exception as e:
+            print(f"保存操作日志失败: {e}")
+            return False
+
+    def load_operations(self, project_id: str) -> list[dict]:
+        """从 EditMeta 加载操作日志"""
+        import json
+        from novel2script.schema import EditMeta
+        
+        edit_meta_dict = self.load_edit_meta(project_id)
+        
+        if not edit_meta_dict:
+            return []
+        
+        operation_log = edit_meta_dict.get("operation_log", [])
+        return operation_log
+
     def load_edit_meta(self, project_id: str) -> dict:
         """加载编辑器元数据（返回字典，如果不存在则返回默认值）"""
         import json

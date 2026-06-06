@@ -474,6 +474,12 @@
                             </svg>
                             版本历史
                         </button>
+                        <button @click="toggleOperationLog()" class="btn-secondary" aria-label="查看操作日志">
+                            <svg class="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            操作日志
+                        </button>
                     </div>
                 </div>
                 
@@ -643,7 +649,131 @@
                         </template>
                     </div>
                 </template>
-                
+
+                <!-- 操作日志面板（逐句修改历史） -->
+                <template x-if="showOperationLog">
+                    <div class="mt-4 bg-white rounded-xl shadow-sm p-6 animate-fade-in">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-bold text-gray-900">📝 操作日志</h3>
+                            <div class="flex items-center gap-3">
+                                <!-- 过滤器 -->
+                                <select x-model="operationFilter" class="text-xs border border-gray-300 rounded-lg px-2 py-1">
+                                    <option value="all">全部操作</option>
+                                    <option value="create_beat">创建 Beat</option>
+                                    <option value="update_beat">更新 Beat</option>
+                                    <option value="delete_beat">删除 Beat</option>
+                                    <option value="update_novel">更新小说</option>
+                                </select>
+                                <button @click="toggleOperationLog()" class="text-gray-400 hover:text-gray-600">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 操作日志时间轴 -->
+                        <div x-show="filteredOperations.length === 0" class="text-sm text-gray-500 text-center py-8">
+                            暂无操作日志
+                        </div>
+
+                        <div x-show="filteredOperations.length > 0" class="space-y-3 max-h-96 overflow-y-auto">
+                            <template x-for="(operation, index) in filteredOperations" :key="index">
+                                <div class="relative pl-8 pb-4 border-l-2 border-indigo-200 last:border-l-0">
+                                    <!-- 时间线圆点 -->
+                                    <div class="absolute left-[-9px] top-0 w-4 h-4 bg-indigo-500 rounded-full border-2 border-white"></div>
+
+                                    <!-- 操作内容 -->
+                                    <div class="bg-gray-50 rounded-lg p-3 hover:bg-gray-100 transition-colors cursor-pointer"
+                                         @click="viewOperation(operation)">
+                                        <div class="flex items-center justify-between mb-1">
+                                            <span class="text-xs font-semibold text-indigo-600" x-text="formatAction(operation.action)"></span>
+                                            <span class="text-xs text-gray-400" x-text="formatTimestamp(operation.timestamp)"></span>
+                                        </div>
+                                        <div class="text-xs text-gray-600">
+                                            <template x-if="operation.beat_id">
+                                                <span class="text-gray-500">Beat: <span class="font-mono text-xs" x-text="operation.beat_id.substring(0, 8) + '...'"></span></span>
+                                            </template>
+                                            <template x-if="operation.field">
+                                                <span class="ml-2">字段: <span class="font-semibold" x-text="operation.field"></span></span>
+                                            </template>
+                                        </div>
+                                        <template x-if="operation.old_value || operation.new_value">
+                                            <div class="mt-1 text-xs">
+                                                <template x-if="operation.old_value">
+                                                    <div class="text-red-500">- <span x-text="operation.old_value"></span></div>
+                                                </template>
+                                                <template x-if="operation.new_value">
+                                                    <div class="text-green-500">+ <span x-text="operation.new_value"></span></div>
+                                                </template>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+
+                        <!-- 操作详情弹窗 -->
+                        <template x-if="currentOperation">
+                            <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" @click.self="closeOperationDetail()">
+                                <div class="bg-white rounded-xl p-6 max-w-lg w-full mx-4 max-h-96 overflow-y-auto">
+                                    <div class="flex justify-between items-center mb-4">
+                                        <h4 class="font-bold text-gray-900">操作详情</h4>
+                                        <button @click="closeOperationDetail()" class="text-gray-400 hover:text-gray-600">
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    <div class="space-y-3 text-sm">
+                                        <div>
+                                            <span class="font-semibold text-gray-700">操作类型：</span>
+                                            <span class="text-indigo-600" x-text="formatAction(currentOperation.action)"></span>
+                                        </div>
+                                        <div>
+                                            <span class="font-semibold text-gray-700">操作时间：</span>
+                                            <span x-text="formatTimestamp(currentOperation.timestamp)"></span>
+                                        </div>
+                                        <template x-if="currentOperation.beat_id">
+                                            <div>
+                                                <span class="font-semibold text-gray-700">Beat ID：</span>
+                                                <span class="font-mono text-xs" x-text="currentOperation.beat_id"></span>
+                                            </div>
+                                        </template>
+                                        <template x-if="currentOperation.field">
+                                            <div>
+                                                <span class="font-semibold text-gray-700">修改字段：</span>
+                                                <span x-text="currentOperation.field"></span>
+                                            </div>
+                                        </template>
+                                        <template x-if="currentOperation.old_value">
+                                            <div>
+                                                <span class="font-semibold text-gray-700">原值：</span>
+                                                <pre class="mt-1 p-2 bg-red-50 rounded text-xs whitespace-pre-wrap" x-text="currentOperation.old_value"></pre>
+                                            </div>
+                                        </template>
+                                        <template x-if="currentOperation.new_value">
+                                            <div>
+                                                <span class="font-semibold text-gray-700">新值：</span>
+                                                <pre class="mt-1 p-2 bg-green-50 rounded text-xs whitespace-pre-wrap" x-text="currentOperation.new_value"></pre>
+                                            </div>
+                                        </template>
+                                        <template x-if="currentOperation.scene_id">
+                                            <div>
+                                                <span class="font-semibold text-gray-700">场景 ID：</span>
+                                                <span x-text="currentOperation.scene_id"></span>
+                                            </div>
+                                        </template>
+                                    </div>
+                                    <div class="mt-4 flex justify-end gap-2">
+                                        <button @click="closeOperationDetail()" class="btn-secondary text-xs">关闭</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+
                 <!-- 使用指南（可折叠） -->
                 <div class="mt-6 bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl shadow-sm p-6 animate-fade-in">
                     <div class="flex items-center justify-between mb-3">
