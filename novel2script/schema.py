@@ -24,14 +24,26 @@ class BeatType:
 # ─────────────────────────────────────────────
 # 基础 Beat(内部使用,不直接暴露)
 # ─────────────────────────────────────────────
+class SourceLocation(BaseModel):
+    """原文位置映射（用于滚动联动）"""
+
+    model_config = {"extra": "forbid"}
+
+    chapter_index: int = Field(..., description="章节序号（从 0 开始）")
+    start_paragraph: int = Field(..., description="起始段落索引（按双换行人切分）")
+    end_paragraph: int = Field(..., description="结束段落索引")
+    start_offset: int = Field(0, description="段落内起始字符偏移")
+    end_offset: int = Field(0, description="段落内结束字符偏移")
+
+
 class BaseBeat(BaseModel):
     """所有 Beat 的基类(不直接使用)"""
 
     model_config = {"extra": "forbid"}
 
-    source_location: dict[str, Any] | None = Field(
+    source_location: SourceLocation | None = Field(
         None,
-        description="原文定位:{chapter, paragraph, sentence}",
+        description="原文定位：chapter_index + paragraph range + offset",
     )
 
 

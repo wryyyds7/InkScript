@@ -1,0 +1,9 @@
+{
+  "name": "fountain-export",
+  "type": "exporter",
+  "description": "将 YAML 剧本导出为 Fountain 格式（好莱坞标准剧本格式）",
+  "version": "1.0.0",
+  "author": "InkScript Team",
+  "priority": 10,
+  "enabled": true
+}

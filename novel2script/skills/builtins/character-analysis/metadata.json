@@ -1,0 +1,9 @@
+{
+  "name": "character-analysis",
+  "description": "分析小说中的角色，生成角色分析报告",
+  "priority": 1,
+  "enabled": true,
+  "version": "1.0.0",
+  "author": "InkScript Team",
+  "created_at": "2026-06-06T00:00:00Z"
+}

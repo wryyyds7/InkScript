@@ -59,6 +59,9 @@ class OpenAIClient:
         temperature: float | None = None,
         max_tokens: int | None = None,
         timeout: float | None = None,
+        top_p: float | None = None,
+        frequency_penalty: float | None = None,
+        presence_penalty: float | None = None,
     ) -> str:
         cfg = get_config()
         kwargs: dict[str, Any] = {
@@ -70,6 +73,18 @@ class OpenAIClient:
         }
         if response_format:
             kwargs["response_format"] = response_format
+        if top_p is not None:
+            kwargs["top_p"] = top_p
+        elif cfg.llm_top_p != 1.0:
+            kwargs["top_p"] = cfg.llm_top_p
+        if frequency_penalty is not None:
+            kwargs["frequency_penalty"] = frequency_penalty
+        elif cfg.llm_frequency_penalty != 0.0:
+            kwargs["frequency_penalty"] = cfg.llm_frequency_penalty
+        if presence_penalty is not None:
+            kwargs["presence_penalty"] = presence_penalty
+        elif cfg.llm_presence_penalty != 0.0:
+            kwargs["presence_penalty"] = cfg.llm_presence_penalty
 
         resp = self._client.chat.completions.create(**kwargs)
         content = resp.choices[0].message.content or ""

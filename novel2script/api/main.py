@@ -60,10 +60,14 @@ def create_app() -> FastAPI:
     return app
 
 
+# 模块级 app 实例,供 uvicorn 直接导入:
+#   uvicorn novel2script.api.main:app
+app = create_app()
+
+
 if __name__ == "__main__":
     import uvicorn
     cfg = get_config()
-    app = create_app()
     uvicorn.run(
         app,
         host=cfg.host,

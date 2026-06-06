@@ -49,9 +49,133 @@ class FileSystemProjectStore:
     def _script_path(self, project_id: str) -> Path:
         return self._project_path(project_id) / "script.yaml"
 
+    def _versions_dir(self, project_id: str) -> Path:
+        return self._project_path(project_id) / "versions"
+
+    def _version_path(self, project_id: str, version_id: str) -> Path:
+        return self._versions_dir(project_id) / f"{version_id}.yaml"
+
     def _next_id(self) -> str:
         import uuid
         return f"proj_{datetime.now():%Y%m%d_%H%M%S}_{uuid.uuid4().hex[:6]}"
+
+    def _next_version_id(self) -> str:
+        """生成版本 ID（时间戳）"""
+        return f"v{datetime.now():%Y%m%d_%H%M%S}"
+
+    # ── 版本管理功能 ──────────────────────────────
+    def create_version_snapshot(self, project_id: str, description: str = "") -> dict:
+        """创建版本快照（在保存前自动调用）"""
+        import json
+        
+        # 确保版本目录存在
+        versions_dir = self._versions_dir(project_id)
+        versions_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 获取当前剧本内容
+        script = self.load_script(project_id)
+        if not script:
+            return None
+        
+        # 生成版本 ID
+        version_id = self._next_version_id()
+        
+        # 保存版本快照
+        from novel2script.schema import to_yaml
+        version_data = {
+            "version_id": version_id,
+            "project_id": project_id,
+            "created_at": datetime.now().isoformat(),
+            "description": description,
+            "script_yaml": to_yaml(script)
+        }
+        
+        version_file = self._version_path(project_id, version_id)
+        version_file.write_text(
+            json.dumps(version_data, ensure_ascii=False, indent=2),
+            encoding="utf-8"
+        )
+        
+        # 清理旧版本（最多保留 10 个）
+        self._cleanup_old_versions(project_id, keep=10)
+        
+        return version_data
+
+    def _cleanup_old_versions(self, project_id: str, keep: int = 10):
+        """清理旧版本，只保留最近 keep 个"""
+        
+        versions_dir = self._versions_dir(project_id)
+        if not versions_dir.exists():
+            return
+        
+        # 获取所有版本文件
+        version_files = sorted(
+            versions_dir.glob("v*.yaml"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True
+        )
+        
+        # 删除超出数量的旧版本
+        for old_file in version_files[keep:]:
+            old_file.unlink()
+
+    def list_versions(self, project_id: str) -> list[dict]:
+        """列出项目的所有版本快照"""
+        import json
+        
+        versions_dir = self._versions_dir(project_id)
+        if not versions_dir.exists():
+            return []
+        
+        versions = []
+        for version_file in sorted(
+            versions_dir.glob("v*.yaml"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True
+        ):
+            try:
+                data = json.loads(version_file.read_text(encoding="utf-8"))
+                versions.append({
+                    "version_id": data.get("version_id"),
+                    "created_at": data.get("created_at"),
+                    "description": data.get("description", ""),
+                })
+            except Exception:
+                continue
+        
+        return versions
+
+    def get_version(self, project_id: str, version_id: str) -> dict | None:
+        """获取指定版本的详情"""
+        import json
+        
+        version_file = self._version_path(project_id, version_id)
+        if not version_file.exists():
+            return None
+        
+        return json.loads(version_file.read_text(encoding="utf-8"))
+
+    def rollback_version(self, project_id: str, version_id: str) -> bool:
+        """回滚到指定版本"""
+        import json
+        from novel2script.schema import from_yaml
+        
+        # 获取版本数据
+        version_data = self.get_version(project_id, version_id)
+        if not version_data:
+            return False
+        
+        # 在回滚前，先创建当前状态的快照（以便可以撤销回滚）
+        self.create_version_snapshot(project_id, description=f"回滚前快照（即将回滚到 {version_id}）")
+        
+        # 恢复版本数据
+        script_yaml = version_data.get("script_yaml", "")
+        script = from_yaml(script_yaml)
+        
+        # 保存到当前剧本
+        self.save_script(project_id, script)
+        
+        return True
 
     # ── CRUD ──────────────────────────────────
     def list_projects(self) -> list[dict]:
@@ -105,11 +229,163 @@ class FileSystemProjectStore:
         )
         return meta
 
-    def delete_project(self, project_id: str) -> None:
+    def delete_project(self, project_id: str, soft_delete: bool = True) -> None:
+        """删除项目（支持软删除）"""
         import shutil
+        
         proj_dir = self._project_path(project_id)
-        if proj_dir.exists():
+        if not proj_dir.exists():
+            return
+        
+        if soft_delete:
+            # 软删除：移动到 trash 目录
+            self._move_to_trash(proj_dir, project_id)
+        else:
+            # 硬删除：直接删除
             shutil.rmtree(proj_dir)
+
+    def _move_to_trash(self, proj_dir: Path, project_id: str) -> None:
+        """将项目移动到回收站"""
+        import shutil
+        from datetime import datetime
+        
+        # 创建 trash 目录
+        trash_dir = self.base_dir.parent / "trash"
+        trash_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 生成回收站中的项目名称（添加删除时间戳）
+        deleted_at = f"{datetime.now():%Y%m%d_%H%M%S}"
+        trash_name = f"{project_id}_deleted_{deleted_at}"
+        trash_path = trash_dir / trash_name
+        
+        # 移动项目到回收站
+        shutil.move(str(proj_dir), str(trash_path))
+        
+        # 记录删除信息
+        delete_info = {
+            "project_id": project_id,
+            "original_name": self.get_project_info(project_id, proj_dir),
+            "deleted_at": datetime.now().isoformat(),
+            "trash_path": str(trash_path)
+        }
+        
+        info_file = trash_path / "delete_info.json"
+        info_file.write_text(
+            __import__("json").dumps(delete_info, ensure_ascii=False, indent=2),
+            encoding="utf-8"
+        )
+
+    def get_project_info(self, project_id: str, proj_dir: Path = None) -> dict:
+        """获取项目信息（用于回收站显示）"""
+        if not proj_dir:
+            proj_dir = self._project_path(project_id)
+        
+        meta_file = proj_dir / "meta.json"
+        if meta_file.exists():
+            import json
+            return json.loads(meta_file.read_text(encoding="utf-8"))
+        return {"id": project_id, "name": "未知项目"}
+
+    def list_trash(self) -> list[dict]:
+        """列出回收站中的所有项目"""
+        import json
+        
+        trash_dir = self.base_dir.parent / "trash"
+        if not trash_dir.exists():
+            return []
+        
+        trash_items = []
+        for item in trash_dir.iterdir():
+            if not item.is_dir():
+                continue
+            
+            # 读取删除信息
+            info_file = item / "delete_info.json"
+            if info_file.exists():
+                try:
+                    info = json.loads(info_file.read_text(encoding="utf-8"))
+                    trash_items.append(info)
+                except Exception:
+                    # 如果没有 delete_info.json，尝试读取 meta.json
+                    meta = self.get_project_info("", item)
+                    trash_items.append({
+                        "project_id": meta.get("id", item.name),
+                        "original_name": meta.get("name", "未知项目"),
+                        "deleted_at": "未知时间"
+                    })
+            else:
+                # 如果没有 delete_info.json，尝试读取 meta.json
+                meta = self.get_project_info("", item)
+                trash_items.append({
+                    "project_id": meta.get("id", item.name),
+                    "original_name": meta.get("name", "未知项目"),
+                    "deleted_at": "未知时间"
+                })
+        
+        # 按删除时间倒序排序
+        trash_items.sort(key=lambda x: x.get("deleted_at", ""), reverse=True)
+        return trash_items
+
+    def _get_project_info_from_path(self, proj_dir: Path) -> dict:
+        """从项目目录路径获取项目信息（用于回收站显示）"""
+        meta_file = proj_dir / "meta.json"
+        if meta_file.exists():
+            import json
+            return json.loads(meta_file.read_text(encoding="utf-8"))
+        return {"id": proj_dir.name, "name": "未知项目"}
+
+    def restore_from_trash(self, project_id: str) -> bool:
+        """从回收站恢复项目"""
+        import shutil
+        
+        trash_dir = self.base_dir.parent / "trash"
+        if not trash_dir.exists():
+            return False
+        
+        # 查找回收站中的项目
+        for item in trash_dir.iterdir():
+            if not item.is_dir():
+                continue
+            
+            info_file = item / "delete_info.json"
+            if info_file.exists():
+                import json
+                info = json.loads(info_file.read_text(encoding="utf-8"))
+                if info.get("project_id") == project_id:
+                    # 恢复项目
+                    target_path = self._project_path(project_id)
+                    if target_path.exists():
+                        # 如果目标位置已存在，先删除
+                        shutil.rmtree(str(target_path))
+                    
+                    shutil.move(str(item), str(target_path))
+                    return True
+        
+        return False
+
+    def permanent_delete(self, project_id: str) -> bool:
+        """从回收站永久删除项目"""
+        import shutil
+        
+        trash_dir = self.base_dir.parent / "trash"
+        if not trash_dir.exists():
+            return False
+        
+        # 查找回收站中的项目
+        for item in trash_dir.iterdir():
+            if not item.is_dir():
+                continue
+            
+            info_file = item / "delete_info.json"
+            if info_file.exists():
+                import json
+                info = json.loads(info_file.read_text(encoding="utf-8"))
+                if info.get("project_id") == project_id:
+                    # 永久删除
+                    shutil.rmtree(str(item))
+                    return True
+        
+        return False
 
     # ── 内容读写 ──────────────────────────────
     def save_novel(self, project_id: str, text: str) -> None:
@@ -122,7 +398,14 @@ class FileSystemProjectStore:
         return p.read_text(encoding="utf-8")
 
     def save_script(self, project_id: str, script: Script) -> None:
+        """保存剧本（自动创建版本快照）"""
+        import json
         from novel2script.schema import to_yaml
+        
+        # 在保存前创建版本快照
+        self.create_version_snapshot(project_id, description="自动保存快照")
+        
+        # 保存剧本
         self._script_path(project_id).write_text(
             to_yaml(script), encoding="utf-8"
         )
