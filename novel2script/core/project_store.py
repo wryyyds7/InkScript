@@ -66,6 +66,43 @@ class FileSystemProjectStore:
     def _next_version_id(self) -> str:
         """生成版本 ID（时间戳）"""
         return f"v{datetime.now():%Y%m%d_%H%M%S}"
+    
+    def create_novel_snapshot(self, project_id: str, description: str = "") -> dict:
+        """创建小说原文版本快照（在预处理操作前自动调用）"""
+        import json
+        
+        # 确保版本目录存在
+        versions_dir = self._versions_dir(project_id)
+        versions_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 获取当前小说原文内容
+        novel_text = self.load_novel(project_id)
+        if not novel_text:
+            return None
+        
+        # 生成版本 ID
+        version_id = self._next_version_id()
+        
+        # 保存版本快照
+        version_data = {
+            "version_id": version_id,
+            "project_id": project_id,
+            "created_at": datetime.now().isoformat(),
+            "description": description,
+            "type": "novel",  # 标记为小说原文快照
+            "novel_text": novel_text
+        }
+        
+        version_file = self._version_path(project_id, version_id)
+        version_file.write_text(
+            json.dumps(version_data, ensure_ascii=False, indent=2),
+            encoding="utf-8"
+        )
+        
+        # 清理旧版本（最多保留 10 个）
+        self._cleanup_old_versions(project_id, keep=10)
+        
+        return version_data
 
     # ── 版本管理功能 ──────────────────────────────
     def create_version_snapshot(self, project_id: str, description: str = "") -> dict:

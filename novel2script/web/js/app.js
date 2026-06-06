@@ -683,9 +683,18 @@ function app() {
             
             // 初始化右键菜单，并传入处理函数
             initNovelContextMenu(this.novelEditor, {
-                onDelete: (view, from, to) => {
+                onDelete: async (view, from, to) => {
+                    // 数据校验：确保有选中内容
+                    if (from >= to) {
+                        this.showToast('请先选中要删除的内容');
+                        return;
+                    }
+                    
+                    // 提交逻辑：先创建版本快照
+                    await this._createNovelSnapshot('删除操作前快照');
+                    
                     // 删除选中内容（先确认）
-                    if (confirm('确认删除选中内容？此操作不可撤销。')) {
+                    if (confirm('确认删除选中内容？此操作可以回滚。')) {
                         view.dispatch({
                             changes: { from, to, insert: '' }
                         });
@@ -693,13 +702,35 @@ function app() {
                         this.debounceSaveNovel();
                     }
                 },
-                onMerge: (view) => {
+                onMerge: async (view) => {
+                    // 数据校验：确保有选中内容
+                    const { state } = view;
+                    const selection = state.selection.main;
+                    if (selection.empty) {
+                        this.showToast('请先选中要合并的段落');
+                        return;
+                    }
+                    
+                    // 提交逻辑：先创建版本快照
+                    await this._createNovelSnapshot('合并段落操作前快照');
+                    
                     // 合并段落
                     mergeParagraphs(view);
                     this.showToast('已合并段落');
                     this.debounceSaveNovel();
                 },
-                onAddMark: (view, markType, noteText) => {
+                onAddMark: async (view, markType, noteText) => {
+                    // 数据校验：确保有选中内容
+                    const { state } = view;
+                    const selection = state.selection.main;
+                    if (selection.empty && markType !== 'note') {
+                        this.showToast('请先选中要标记的位置');
+                        return;
+                    }
+                    
+                    // 提交逻辑：先创建版本快照
+                    await this._createNovelSnapshot(`添加标记 ${markType} 前快照`);
+                    
                     // 添加标记
                     insertMark(view, markType, noteText);
                     const markText = markType === 'note' ? `note: ${noteText}` : markType;
@@ -707,6 +738,28 @@ function app() {
                     this.debounceSaveNovel();
                 }
             });
+        },
+        
+        /** 创建小说原文版本快照（提交逻辑） */
+        async _createNovelSnapshot(description) {
+            if (!this.activeProject) return;
+            
+            try {
+                const response = await fetch(`/api/v1/projects/${this.activeProject.id}/novel-snapshot`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ description })
+                });
+                
+                const result = await response.json();
+                if (result.code === 0) {
+                    console.log('版本快照创建成功:', result.data);
+                } else {
+                    console.error('版本快照创建失败:', result.message);
+                }
+            } catch (error) {
+                console.error('版本快照创建失败:', error);
+            }
         },
 
         /** 初始化 Beat 内联编辑（P0-3） */
@@ -1013,7 +1066,77 @@ function app() {
 
         /** 导出 Fountain 格式（需后端 Skill 支持，当前提示） */
         exportFountain() {
-            alert('Fountain 导出功能正在开发中，当前暂不可用。\n\n即将到来的版本将支持 .fountain 格式导出。');
+            if (!this.activeProject) {
+                this.showToast('请先打开一个项目');
+                return;
+            }
+            
+            // 数据校验：确保有剧本数据
+            const scriptYaml = this.scriptEditor ? this.scriptEditor.state.doc.toString() : '';
+            if (!scriptYaml || scriptYaml.trim() === '') {
+                this.showToast('当前没有剧本数据，无法导出');
+                return;
+            }
+            
+            // 状态管理：显示导出进度
+            this.converting = true;
+            this.currentStep = '正在导出 Fountain...';
+            this.progress = 0;
+            
+            // 提交逻辑：调用 fountain-export Skill
+            this._submitFountainExport(scriptYaml);
+        },
+        
+        async _submitFountainExport(scriptYaml) {
+            try {
+                // 数据提交：调用后端 Skill
+                const response = await fetch('/api/v1/skills/fountain-export/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        data: {
+                            yaml_content: scriptYaml,
+                            project_name: this.activeProject.name || 'script'
+                        },
+                        config: {}
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.code === 0 && result.data && result.data.success) {
+                    // 处理成功结果：下载 .fountain 文件
+                    const fountainContent = result.data.data.content;
+                    const filename = result.data.data.filename || 'script.fountain';
+                    
+                    this._downloadFile(fountainContent, filename, 'text/plain');
+                    this.showToast('Fountain 导出成功');
+                } else {
+                    // 处理失败结果
+                    throw new Error(result.message || result.data?.error || '导出失败');
+                }
+            } catch (error) {
+                console.error('Fountain 导出失败:', error);
+                alert('Fountain 导出失败: ' + error.message);
+            } finally {
+                // 状态重置
+                this.converting = false;
+                this.currentStep = '';
+                this.progress = 0;
+            }
+        },
+        
+        _downloadFile(content, filename, mimeType) {
+            // 创建 Blob 并触发下载
+            const blob = new Blob([content], { type: mimeType });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
         },
 
         /** 通用文件下载 */

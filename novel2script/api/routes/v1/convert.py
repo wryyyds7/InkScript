@@ -1,9 +1,7 @@
 """转换任务 API 路由(含 SSE 进度推送)"""
 
 
-
 from __future__ import annotations
-
 
 
 import asyncio
@@ -15,11 +13,9 @@ import time
 from typing import AsyncGenerator
 
 
-
 from fastapi import APIRouter, Depends
 
 from sse_starlette import EventSourceResponse
-
 
 
 from novel2script.api.sse import sse_manager
@@ -29,15 +25,10 @@ from novel2script.core.project_store import FileSystemProjectStore
 from novel2script.config import get_config
 
 
-
 router = APIRouter(prefix="/convert", tags=["convert"])
 
 
-
-
-
 # ── 依赖 ─────────────────────────────────────
-
 def get_store() -> FileSystemProjectStore:
 
     cfg = get_config()
@@ -45,19 +36,11 @@ def get_store() -> FileSystemProjectStore:
     return FileSystemProjectStore(cfg.projects_dir)
 
 
-
-
-
 # ── 内存任务状态(V1 简化;V2 改用 Redis) ───
-
 _task_status: dict[str, dict] = {}
 
 
-
-
-
-# ── 路由 ───────────────────────────────────────
-
+# ── 路由 ──────────────────────────────────────────
 @router.post("/{project_id}")
 
 async def start_convert(
@@ -74,7 +57,7 @@ async def start_convert(
 
     import uuid
 
-
+    
 
     task_id = f"task_{uuid.uuid4().hex[:8]}"
 
@@ -92,295 +75,264 @@ async def start_convert(
 
     }
 
-
+    
 
     # 使用 asyncio.create_task 在事件循环中调度后台任务
 
     asyncio.create_task(_run_pipeline(task_id, project_id, store))
 
+    
 
-
-    return {
-
-        "code": 0,
-
-        "message": "转换任务已启动",
-
-        "data": {
-
-            "task_id": task_id,
-
-            "sse_url": f"/api/v1/convert/{task_id}/progress",
-
-        },
-
-    }
+    return {"code": 0, "message": "转换任务已启动", "data": {"task_id": task_id}}
 
 
 
+@router.get("/{task_id}/sse")
 
-
-@router.get("/{task_id}/progress")
-
-async def get_progress(
+async def get_sse_stream(
 
     task_id: str,
 
-    last_event_ts: float = 0.0,
-
 ):
 
-    """SSE 端点:获取转换进度
+    """获取 SSE 事件流"""
+
+    return EventSourceResponse(
+
+        sse_manager.subscribe(task_id),
+
+        ping=15,  # 每 15 秒发送一次心跳
+
+    )
 
 
 
-    last_event_ts:客户端上次收到事件的时间戳(用于重连补全)
+# ── 后台任务 ─────────────────────────────────────
+async def _run_pipeline(task_id: str, project_id: str, store: FileSystemProjectStore):
 
-    """
+    """运行转换流水线"""
 
+    import os
 
+    from novel2script.core.pipeline import Pipeline
 
-    async def event_generator() -> AsyncGenerator[dict, None]:
+    from novel2script.skills.loader import load_skill
 
-        # 1. 补全缓存事件
-
-        cached = sse_manager.get_cached_events(task_id, last_event_ts)
-
-        for event in cached:
-
-            yield event
-
-
-
-        # 2. 注册客户端,等待新事件
-
-        client_id = f"{task_id}_{int(time.time() * 1000)}"
-
-        queue = await sse_manager.register_client(client_id, task_id)
-
-
-
-        try:
-
-            while True:
-
-                try:
-
-                    event = await asyncio.wait_for(queue.get(), timeout=15.0)
-
-                    yield event
-
-                    # 如果任务完成/失败,结束流
-
-                    if event.get("event") in ("task_complete", "task_failed"):
-
-                        break
-
-                except asyncio.TimeoutError:
-
-                    heartbeat = {
-
-                        "event": "heartbeat",
-
-                        "data": json.dumps({"ts": time.time()}, ensure_ascii=False),
-
-                    }
-
-                    yield heartbeat
-
-                    await sse_manager.push_event(task_id, heartbeat)
-
-        finally:
-
-            await sse_manager.unregister_client(client_id)
-
-
-
-    return EventSourceResponse(event_generator())
-
-
-
-
-
-# ── 后台任务 ──────────────────────────────────
-
-async def _run_pipeline(
-
-    task_id: str,
-
-    project_id: str,
-
-    store: FileSystemProjectStore,
-
-):
-
-    """后台执行 Pipeline,并通过 SSE 推送进度"""
-
-    from novel2script.llm_client import OpenAIClient
-
-    from novel2script.core.pipeline import build_pipeline
-
-    from novel2script.schema import Script
-
-
-
-    steps = ["character_extractor", "scene_splitter", "dialogue_parser",
-
-             "emotion_tagger", "yaml_generator"]
-
-    total = len(steps)
-
-
+    
 
     try:
 
-        # 加载数据
+        # 更新任务状态
+
+        _update_task_status(task_id, "running", "init", 0.0)
+
+        
+
+        # 加载项目数据
 
         novel_text = store.load_novel(project_id)
 
-        script = Script()
+        if not novel_text:
 
+            raise ValueError("小说原文为空")
 
+        
 
-        llm = OpenAIClient()
+        # 创建 Pipeline 实例
 
-        pipeline = build_pipeline(llm=llm)
+        pipeline = Pipeline()
 
+        
 
+        # 注册 Skill
 
-        # 注入 before Hook（步骤开始时推送 step_start 事件）
+        skill_dirs = [
+
+            os.path.join(os.path.dirname(__file__), "../../skills/builtins"),
+
+            os.path.join(os.path.dirname(__file__), "../../skills/user"),
+
+        ]
+
+        
+
+        for skill_dir in skill_dirs:
+
+            if not os.path.exists(skill_dir):
+
+                continue
+
+            
+
+            for skill_name in os.listdir(skill_dir):
+
+                skill_path = os.path.join(skill_dir, skill_name)
+
+                if not os.path.isdir(skill_path):
+
+                    continue
+
+                
+
+                try:
+
+                    skill = load_skill(skill_path)
+
+                    if skill:
+
+                        pipeline.register_skill(skill_name, skill)
+
+                except Exception as e:
+
+                    print(f"加载 Skill {skill_name} 失败: {e}")
+
+        
+
+        # 注册钩子函数（用于 SSE 进度推送）
 
         def _before_hook(pl, step_name, ctx):
 
-            idx = next(
+            """步骤开始前推送事件"""
 
-                i for i, s in enumerate(pl.steps) if s.name == step_name
-
-            )
-
-            pct = round((idx + 1) / total * 100, 1)
-
-            _task_status[task_id]["percent"] = pct
-
-            _task_status[task_id]["current_step"] = step_name
+            _update_task_status(task_id, "running", step_name, 0.0)
 
             
 
             # 推送 step_start 事件
 
-            try:
+            asyncio.run_coroutine_threadsafe(
 
-                loop = asyncio.get_running_loop()
+                sse_manager.push_event(
 
-                asyncio.run_coroutine_threadsafe(
+                    task_id,
 
-                    sse_manager.push_event(
+                    {
 
-                        task_id,
+                        "event": "step_start",
 
-                        {
+                        "data": json.dumps(
 
-                            "event": "step_start",
+                            {
 
-                            "data": json.dumps(
+                                "step": step_name,
 
-                                {
+                                "message": f"开始执行步骤: {step_name}",
 
-                                    "step": step_name,
+                            },
 
-                                    "total_steps": total,
+                            ensure_ascii=False,
 
-                                    "current": idx + 1,
+                        ),
 
-                                },
+                    },
 
-                                ensure_ascii=False,
+                ),
 
-                            ),
-
-                        },
-
-                    ),
-
-                    loop,
-
-                )
-
-            except RuntimeError:
-
-                pass
-
-
-
-        # 注入 after Hook（步骤完成时推送 step_complete 事件）
-
-        def _after_hook(pl, step_name, ctx, result):
-
-            idx = next(
-
-                i for i, s in enumerate(pl.steps) if s.name == step_name
+                asyncio.get_event_loop(),
 
             )
 
-            pct = round((idx + 1) / total * 100, 1)
+        
+
+        def _after_hook(pl, step_name, ctx):
+
+            """步骤完成后推送事件"""
+
+            # 计算进度百分比
+
+            total_steps = len(pl.steps)
+
+            current_step_idx = pl.steps.index(step_name) if step_name in pl.steps else 0
+
+            percent = (current_step_idx + 1) / total_steps * 100.0 if total_steps > 0 else 0.0
+
+            
+
+            _update_task_status(task_id, "running", step_name, percent)
 
             
 
             # 推送 step_complete 事件
 
-            try:
+            asyncio.run_coroutine_threadsafe(
 
-                loop = asyncio.get_running_loop()
+                sse_manager.push_event(
 
-                asyncio.run_coroutine_threadsafe(
+                    task_id,
 
-                    sse_manager.push_event(
+                    {
 
-                        task_id,
+                        "event": "step_complete",
 
-                        {
+                        "data": json.dumps(
 
-                            "event": "step_complete",
+                            {
 
-                            "data": json.dumps(
+                                "step": step_name,
 
-                                {
+                                "message": f"步骤完成: {step_name}",
 
-                                    "step": step_name,
+                                "percent": percent,
 
-                                    "result_summary": f"步骤 {step_name} 完成",
+                            },
 
-                                    "percent": pct,
+                            ensure_ascii=False,
 
-                                },
+                        ),
 
-                                ensure_ascii=False,
+                    },
 
-                            ),
+                ),
 
-                        },
+                asyncio.get_event_loop(),
 
-                    ),
+            )
 
-                    loop,
-
-                )
-
-            except RuntimeError:
-
-                pass
-
-
-
-        # 注入 error Hook（步骤失败时推送 step_error 事件）
+        
 
         def _error_hook(pl, step_name, ctx, error):
 
+            """步骤失败时推送事件"""
+
             # 推送 step_error 事件
 
-            try:
+            asyncio.run_coroutine_threadsafe(
 
-                loop = asyncio.get_running_loop()
+                sse_manager.push_event(
+
+                    task_id,
+
+                    {
+
+                        "event": "step_error",
+
+                        "data": json.dumps(
+
+                            {
+
+                                "step": step_name,
+
+                                "error": str(error),
+
+                            },
+
+                            ensure_ascii=False,
+
+                        ),
+
+                    },
+
+                ),
+
+                asyncio.get_event_loop(),
+
+            )
+
+            
+
+            # 如果是 Skill 相关步骤，额外推送 skill_error 事件
+
+            if "skill" in step_name.lower():
 
                 asyncio.run_coroutine_threadsafe(
 
@@ -390,15 +342,17 @@ async def _run_pipeline(
 
                         {
 
-                            "event": "step_error",
+                            "event": "skill_error",
 
                             "data": json.dumps(
 
                                 {
 
-                                    "step": step_name,
+                                    "skill": step_name,
 
                                     "error": str(error),
+
+                                    "message": f"Skill 执行失败: {step_name}",
 
                                 },
 
@@ -410,36 +364,19 @@ async def _run_pipeline(
 
                     ),
 
-                    loop,
-                )
-                # 如果是 Skill 相关步骤，额外推送 skill_error 事件
-                if "skill" in step_name.lower():
-                    asyncio.run_coroutine_threadsafe(
-                        sse_manager.push_event(
-                            task_id,
-                            {
-                                "event": "skill_error",
-                                "data": json.dumps(
-                                    {
-                                        "skill": step_name,
-                                        "error": str(error),
-                                        "message": f"Skill 执行失败: {step_name}",
-                                    },
-                                    ensure_ascii=False,
-                                ),
-                            },
-                        ),
-                    ),
-                    loop,
+                    asyncio.get_event_loop(),
+
                 )
 
+                
 
+                # 记录 Skill 执行错误到日志文件
 
-            except RuntimeError:
+                _log_skill_error(step_name, error, ctx)
 
-                pass
+        
 
-
+        # 注册钩子
 
         pipeline.register_before_hook(_before_hook)
 
@@ -447,79 +384,267 @@ async def _run_pipeline(
 
         pipeline.register_error_hook(_error_hook)
 
+        
 
+        # 运行 Pipeline
 
-        # 执行 Pipeline（同步调用，但在 async 函数中运行）
+        script = store.load_script(project_id)
+
+        if not script:
+
+            # 如果剧本不存在，创建一个新的
+
+            from novel2script.schema import Script
+
+            script = Script(title="未命名剧本", author="未知作者", scenes=[])
+
+        
+
+        # 运行转换
 
         result_script = pipeline.run(script, novel_text)
 
-
+        
 
         # 保存结果
 
         store.save_script(project_id, result_script)
 
+        
 
+        # 更新任务状态
 
-        # 推送完成
+        _update_task_status(task_id, "completed", "complete", 100.0)
 
-        await sse_manager.push_event(
+        
 
-            task_id,
+        # 推送 task_complete 事件
 
-            {
+        asyncio.run_coroutine_threadsafe(
 
-                "event": "task_complete",
+            sse_manager.push_event(
 
-                "data": json.dumps(
+                task_id,
 
-                    {
+                {
 
-                        "result": {
+                    "event": "task_complete",
 
-                            "project_id": project_id,
+                    "data": json.dumps(
 
-                            "beat_count": len(result_script.beats) if result_script.beats else 0,
+                        {
+
+                            "message": "转换任务完成",
+
+                            "result": "success",
 
                         },
 
-                    },
+                        ensure_ascii=False,
 
-                    ensure_ascii=False,
+                    ),
 
-                ),
+                },
 
-            },
+            ),
 
-        )
-
-        _task_status[task_id]["status"] = "completed"
-
-
-
-    except Exception as exc:
-
-        # 推送失败事件
-
-        await sse_manager.push_event(
-
-            task_id,
-
-            {
-
-                "event": "task_failed",
-
-                "data": json.dumps(
-
-                    {"error": str(exc)},
-
-                    ensure_ascii=False,
-
-                ),
-
-            },
+            asyncio.get_event_loop(),
 
         )
 
-        _task_status[task_id]["status"] = "failed"
+        
 
+    except Exception as e:
+
+        # 更新任务状态
+
+        _update_task_status(task_id, "failed", "error", 0.0, str(e))
+
+        
+
+        # 推送 task_failed 事件
+
+        asyncio.run_coroutine_threadsafe(
+
+            sse_manager.push_event(
+
+                task_id,
+
+                {
+
+                    "event": "task_failed",
+
+                    "data": json.dumps(
+
+                        {
+
+                            "message": f"转换任务失败: {str(e)}",
+
+                            "error": str(e),
+
+                        },
+
+                        ensure_ascii=False,
+
+                    ),
+
+                },
+
+            ),
+
+            asyncio.get_event_loop(),
+
+        )
+
+        
+
+        print(f"转换任务失败: {e}")
+
+    
+
+    finally:
+
+        # 清理任务状态（延迟清理，让前端有时间接收最后的事件）
+
+        asyncio.get_event_loop().call_later(60, lambda: _task_status.pop(task_id, None))
+
+    
+
+    return None
+
+
+
+def _update_task_status(task_id: str, status: str, step: str, percent: float, error: str = None):
+
+    """更新任务状态"""
+
+    if task_id in _task_status:
+
+        _task_status[task_id]["status"] = status
+
+        _task_status[task_id]["current_step"] = step
+
+        _task_status[task_id]["percent"] = percent
+
+        
+
+        if error:
+
+            _task_status[task_id]["error"] = error
+
+    
+
+    
+
+def _log_skill_error(skill_name: str, error: Exception, ctx: dict):
+
+    """将 Skill 执行错误记录到日志文件"""
+
+    import os
+
+    from datetime import datetime
+
+    from pathlib import Path
+
+    
+
+    # 构建日志文件路径
+
+    # Skill 名称格式：builtin/skill_name 或 user/skill_name
+
+    # 日志文件路径：novel2script/skills/builtin/skill_name/error.log
+
+    # 或 novel2script/skills/user/skill_name/error.log
+
+    skill_dir = Path(__file__).parent.parent.parent / "skills"
+
+    
+
+    # 清理 skill_name，提取实际的 Skill 目录名
+
+    # 例如："builtin/character-analysis" -> "character-analysis"
+
+    # 例如："user/my-skill" -> "my-skill"
+
+    if "/" in skill_name:
+
+        parts = skill_name.split("/")
+
+        if len(parts) >= 2:
+
+            skill_type = parts[0]  # builtin 或 user
+
+            skill_name_only = parts[1]
+
+            log_dir = skill_dir / skill_type / skill_name_only
+
+        else:
+
+            log_dir = skill_dir / "builtin" / skill_name
+
+    else:
+
+        log_dir = skill_dir / "builtin" / skill_name
+
+    
+
+    # 确保目录存在
+
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    
+
+    # 日志文件路径
+
+    log_file = log_dir / "error.log"
+
+    
+
+    # 构建日志条目
+
+    timestamp = datetime.now().isoformat()
+
+    log_entry = f"[{timestamp}] Skill: {skill_name}\n"
+
+    log_entry += f"Error: {str(error)}\n"
+
+    log_entry += f"Context: {ctx}\n"
+
+    log_entry += "-" * 50 + "\n"
+
+    
+
+    # 追加写入日志文件
+
+    with open(log_file, "a", encoding="utf-8") as f:
+
+        f.write(log_entry)
+
+    
+
+# ── 辅助函数 ─────────────────────────────────────
+def _create_version_snapshot(project_id: str, store: FileSystemProjectStore, description: str = "") -> dict:
+
+    """
+
+    创建版本快照（通用函数，可被多个端点调用）
+
+    
+
+    Args:
+
+        project_id: 项目 ID
+
+        store: 项目存储实例
+
+        description: 快照描述
+
+        
+
+    Returns:
+
+        快照数据字典
+
+    """
+
+    return store.create_version_snapshot(project_id, description)

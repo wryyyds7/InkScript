@@ -14,6 +14,22 @@ from novel2script.config import get_config
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 
+# ── 辅助函数：创建版本快照（用于小说原文或剧本）──────────────────────────────
+def _create_version_snapshot(project_id: str, store: FileSystemProjectStore, description: str = "") -> dict:
+    """
+    创建版本快照（通用函数，可被多个端点调用）
+    
+    Args:
+        project_id: 项目 ID
+        store: 项目存储实例
+        description: 快照描述
+        
+    Returns:
+        快照数据字典
+    """
+    return store.create_version_snapshot(project_id, description)
+
+
 # ── 依赖注入 ─────────────────────────────────────
 def get_store() -> FileSystemProjectStore:
     cfg = get_config()
@@ -246,6 +262,29 @@ def get_version(
         raise HTTPException(status_code=404, detail="版本不存在")
     
     return {"code": 0, "data": version_data}
+
+
+@router.post("/{project_id}/novel-snapshot")
+def create_novel_snapshot(
+    project_id: str,
+    body: dict | None = None,
+    store: FileSystemProjectStore = Depends(get_store),
+):
+    """创建小说原文版本快照（用于预处理操作前）"""
+    # 检查项目是否存在
+    if not store.get_project(project_id):
+        raise HTTPException(status_code=404, detail="项目不存在")
+    
+    # 获取描述
+    description = body.get("description", "预处理操作前快照") if body else "预处理操作前快照"
+    
+    # 创建小说原文快照
+    snapshot_data = store.create_novel_snapshot(project_id, description)
+    
+    if not snapshot_data:
+        raise HTTPException(status_code=500, detail="创建快照失败")
+    
+    return {"code": 0, "message": "快照创建成功", "data": snapshot_data}
 
 
 @router.post("/{project_id}/versions/{version_id}/rollback")
