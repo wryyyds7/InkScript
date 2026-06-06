@@ -75,6 +75,12 @@ function app() {
         selectedEmotionPoint: null,  // 选中的情绪点
         emotionCurveChart: null,  // Chart.js 实例
 
+        // 角色情绪分布雷达图
+        showCharacterPanel: false,  // 是否显示角色面板
+        characters: [],  // 角色列表
+        selectedCharacter: null,  // 当前选中的角色
+        characterRadarChart: null,  // 雷达图 Chart.js 实例
+
         // 回收站
         showTrash: false,        // 是否显示回收站
         trashItems: [],          // 回收站项目列表
@@ -1559,6 +1565,200 @@ function app() {
 
             // 关闭面板
             this.showEmotionCurve = false;
+        },
+
+        // ── 角色情绪分布雷达图 ────────────────────
+        
+        /** 切换角色面板显示/隐藏 */
+        async toggleCharacterPanel() {
+            this.showCharacterPanel = !this.showCharacterPanel;
+            if (this.showCharacterPanel && this.activeProject) {
+                await this.loadCharacters();
+                // 延迟初始化雷达图，等待 DOM 更新
+                setTimeout(() => {
+                    if (this.selectedCharacter) {
+                        this.initCharacterRadarChart();
+                    }
+                }, 100);
+            }
+        },
+
+        /** 加载角色列表 */
+        async loadCharacters() {
+            if (!this.activeProject) return;
+            
+            try {
+                const res = await fetch(`/api/v1/projects/${this.activeProject.id}/characters`);
+                const data = await res.json();
+                if (data.code === 0) {
+                    this.characters = data.data || [];
+                    // 如果有角色且未选中，默认选中第一个
+                    if (this.characters.length > 0 && !this.selectedCharacter) {
+                        this.selectCharacter(this.characters[0]);
+                    }
+                }
+            } catch (e) {
+                console.error('加载角色列表失败:', e);
+                // 如果后端API不存在，从剧本YAML中解析角色
+                this.parseCharactersFromScript();
+            }
+        },
+
+        /** 从剧本YAML中解析角色列表 */
+        parseCharactersFromScript() {
+            if (!this.scriptYaml) return;
+            
+            try {
+                // 简单解析：提取所有 dialogue beat 的 character 字段
+                const lines = this.scriptYaml.split('\n');
+                const characterMap = {};
+                
+                let currentCharacter = null;
+                for (const line of lines) {
+                    const charMatch = line.match(/^\s+character:\s*(.+)$/);
+                    if (charMatch) {
+                        currentCharacter = charMatch[1].trim();
+                        if (!characterMap[currentCharacter]) {
+                            characterMap[currentCharacter] = {
+                                name: currentCharacter,
+                                dialogue_count: 0,
+                                emotion_distribution: {
+                                    happy: 0.2,
+                                    sad: 0.1,
+                                    angry: 0.1,
+                                    calm: 0.3,
+                                    excited: 0.2,
+                                    fear: 0.1
+                                }
+                            };
+                        }
+                    }
+                    
+                    const typeMatch = line.match(/^\s+type:\s*dialogue$/);
+                    if (typeMatch && currentCharacter) {
+                        characterMap[currentCharacter].dialogue_count++;
+                    }
+                }
+                
+                this.characters = Object.values(characterMap);
+                
+                // 如果有角色且未选中，默认选中第一个
+                if (this.characters.length > 0 && !this.selectedCharacter) {
+                    this.selectCharacter(this.characters[0]);
+                }
+            } catch (e) {
+                console.error('解析角色列表失败:', e);
+            }
+        },
+
+        /** 选择角色 */
+        selectCharacter(character) {
+            this.selectedCharacter = character;
+            // 初始化雷达图
+            setTimeout(() => {
+                this.initCharacterRadarChart();
+            }, 100);
+        },
+
+        /** 初始化角色雷达图 */
+        initCharacterRadarChart() {
+            if (!this.selectedCharacter) return;
+            
+            const canvas = document.getElementById('characterRadarChart');
+            if (!canvas) {
+                console.error('找不到雷达图 canvas 元素');
+                return;
+            }
+            
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+            
+            // 销毁之前的图表
+            if (this.characterRadarChart) {
+                this.characterRadarChart.destroy();
+            }
+            
+            // 准备数据
+            const emotions = ['happy', 'sad', 'angry', 'calm', 'excited', 'fear'];
+            const emotionLabels = {
+                happy: '快乐',
+                sad: '悲伤',
+                angry: '愤怒',
+                calm: '平静',
+                excited: '兴奋',
+                fear: '恐惧'
+            };
+            
+            const distribution = this.selectedCharacter.emotion_distribution || {};
+            const data = emotions.map(e => distribution[e] || 0);
+            
+            // 创建雷达图
+            this.characterRadarChart = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: emotions.map(e => emotionLabels[e]),
+                    datasets: [{
+                        label: this.selectedCharacter.name,
+                        data: data,
+                        backgroundColor: 'rgba(99, 102, 241, 0.2)',
+                        borderColor: 'rgba(99, 102, 241, 1)',
+                        borderWidth: 2,
+                        pointBackgroundColor: 'rgba(99, 102, 241, 1)',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 1,
+                        pointRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        r: {
+                            beginAtZero: true,
+                            max: 1,
+                            ticks: {
+                                stepSize: 0.2
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const value = context.raw;
+                                    return `${context.label}: ${(value * 100).toFixed(1)}%`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        },
+
+        /** 定位到角色台词 */
+        async scrollToCharacterDialogues() {
+            if (!this.selectedCharacter || !this.scriptEditor) return;
+            
+            const characterName = this.selectedCharacter.name;
+            const yamlText = await this._getScriptContent();
+            const lines = yamlText.split('\n');
+            
+            // 找到该角色的第一个对话beat
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                if (line.includes('character:') && line.includes(characterName)) {
+                    // 找到角色，滚动到这一行
+                    this.scriptEditor.dispatch({
+                        selection: { anchor: this.scriptEditor.state.doc.line(i + 1).from },
+                        scrollIntoView: true
+                    });
+                    this.showToast(`已定位到 ${characterName} 的台词`);
+                    break;
+                }
+            }
         },
 
         // ── 配置快照查看 ────────────────────
