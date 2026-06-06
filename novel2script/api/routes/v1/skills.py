@@ -299,12 +299,85 @@ def get_skill_errors(
     builtin_dir: tuple[Path, Path] = Depends(get_skills_dir),
 ):
     """获取 Skill 的错误日志"""
-    # TODO: 实现错误日志读取
+    import os
+    
+    builtin_dir_path, user_dir_path = builtin_dir
+    
+    # 构建日志文件路径
+    # skill_name 格式：builtin/skill_name 或 user/skill_name 或直接是 skill_name
+    if "/" in skill_name:
+        parts = skill_name.split("/")
+        if len(parts) >= 2:
+            skill_type = parts[0]  # builtin 或 user
+            skill_name_only = parts[1]
+            if skill_type == "builtin":
+                log_dir = builtin_dir_path / skill_name_only
+            else:
+                log_dir = user_dir_path / skill_name_only
+        else:
+            log_dir = builtin_dir_path / skill_name
+    else:
+        # 默认在 builtin 目录中查找
+        log_dir = builtin_dir_path / skill_name
+    
+    log_file = log_dir / "error.log"
+    
+    errors = []
+    
+    # 读取错误日志文件
+    if log_file.exists():
+        try:
+            content = log_file.read_text(encoding="utf-8")
+            # 解析日志条目（每个条目以 "[" 开头，以 "-"*50 结尾）
+            entries = content.split("-" * 50)
+            
+            for entry in entries:
+                if not entry.strip():
+                    continue
+                
+                # 解析日志条目
+                lines = entry.strip().split("\n")
+                error_obj = {
+                    "timestamp": "",
+                    "skill": skill_name,
+                    "error": "",
+                    "context": "",
+                    "raw": entry.strip()
+                }
+                
+                for line in lines:
+                    if line.startswith("[") and "]" in line:
+                        # 提取时间戳
+                        end_bracket = line.find("]")
+                        error_obj["timestamp"] = line[1:end_bracket]
+                        # 提取 Skill 名称
+                        if "Skill:" in line:
+                            error_obj["skill"] = line[end_bracket+1:].split("Skill:")[1].strip()
+                    elif line.startswith("Error:"):
+                        error_obj["error"] = line[6:].strip()
+                    elif line.startswith("Context:"):
+                        error_obj["context"] = line[8:].strip()
+                
+                errors.append(error_obj)
+                
+        except Exception as e:
+            # 如果读取失败，返回错误信息
+            errors.append({
+                "timestamp": "",
+                "skill": skill_name,
+                "error": f"读取错误日志失败: {str(e)}",
+                "context": "",
+                "raw": ""
+            })
+    
+    # 按时间戳倒序排列（最新的在前面）
+    errors.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+    
     return {
         "code": 0,
         "data": {
             "skill_name": skill_name,
-            "errors": []
+            "errors": errors
         }
     }
 
