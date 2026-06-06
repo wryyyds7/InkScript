@@ -119,6 +119,7 @@ class Character(BaseModel):
     aliases: list[str] = Field(default_factory=list, description="别名列表")
     description: str = Field("", description="角色描述")
     voice_profile: str | None = Field(None, description="声音配置(TTS 用)")
+    emotion_distribution: dict[str, float] = Field(default_factory=dict, description="情绪分布（用于雷达图）：happy/sad/angry/calm/excited/fear -> 0.0-1.0")
 
 
 # ─────────────────────────────────────────────
