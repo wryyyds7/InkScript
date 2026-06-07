@@ -177,15 +177,14 @@ class SceneSplitterStep:
                     },
                 )
                 for s in raw:
+                    from novel2script.schema import Scene
                     script.scenes.append(
-                        type(script).model_validate(  # type: ignore[attr-defined]
-                            {
-                                "scene_id": scene_id,
-                                "title": s.get("title", "") or chapter_title,
-                                "location": s.get("location", ""),
-                                "time": s.get("time", ""),
-                                "beats": [],
-                            }
+                        Scene(
+                            scene_id=scene_id,
+                            title=s.get("title", "") or chapter_title,
+                            location=s.get("location", ""),
+                            time=s.get("time", ""),
+                            beats=[],
                         )
                     )
                     scene_id += 1
