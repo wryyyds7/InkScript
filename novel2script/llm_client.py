@@ -92,7 +92,10 @@ class OpenAIClient:
         print(f"[LLM] 调用 {self.model_name} (timeout={actual_timeout}s, max_tokens={kwargs['max_tokens']})...")
         resp = self._client.chat.completions.create(**kwargs)
         content = resp.choices[0].message.content or ""
-        print(f"[LLM] 响应长度: {len(content)} 字符")
+        finish_reason = resp.choices[0].finish_reason or "unknown"
+        print(f"[LLM] 响应长度: {len(content)} 字符, finish_reason: {finish_reason}")
+        if not content.strip():
+            raise RuntimeError(f"LLM 返回空响应 (finish_reason={finish_reason})，可能是输入过长或模型限制")
         return content
 
     def chat_json(
