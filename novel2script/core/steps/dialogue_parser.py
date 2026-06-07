@@ -13,15 +13,53 @@ from novel2script.llm_client import LLMClientProtocol
 from novel2script.schema import BeatType, DialogueBeat, Script, SourceLocation
 
 
-_SYSTEM_PROMPT = """你是一个专业的剧本对白解析师。
-从小说文本中识别所有对白，输出 JSON 数组。
 
-每个对白包含:
-- character: 说话角色名称
-- content: 对白内容
-- emotion: 情绪(可选,如 happy/sad/angry/calm)
-- source_start: 对白在本文本片段中的**起始段落索引**（从 0 开始，按双换行分段）
-- source_end: 对白在本文本片段中的**结束段落索引**（通常与 start 相同，除非对白跨多段）
+
+_SYSTEM_PROMPT = """你是一个专业的剧本解析师，需要将小说文本转换为结构化剧本。
+你需要识别所有对白、动作描述、情绪变化，并标注镜头指示。
+
+## 输出格式
+输出一个 JSON 数组，每个元素是剧本中的一个 beat（节拍）。
+
+## Beat 类型
+- "dialogue": 角色对白（包含说话人、内容、情绪）
+- "action": 动作/场景描述（包含镜头指示和动作内容）
+- "narration": 旁白/内心独白
+
+## 镜头指示（放在 action beat 的 content 中）
+- 远景/中景/近景/特写/大特写
+- 固定机位/缓慢推进/微仰角
+- 叠化转场/闪回/淡出
+- 冷色调/暖色调
+
+## 情绪标注
+从以下选择：happy/sad/angry/calm/excited/fear/surprised/confident/firm/cold/curious/mock/embarrassed
+
+## 示例
+输入文本：
+```
+荻原明靠在吊椅上，悠闲地翘着腿，温和帅气的脸上挂着浅笑。
+荻原明：（微笑）怎么，决定好了吗，霞之丘小姐。
+诗羽暗暗咬了咬牙，手指不自觉抓紧腿部内侧。
+霞之丘诗羽：（低头，诚恳）抱歉，荻原先生，我反悔了。
+```
+
+输出：
+```json
+[
+  {{"type": "action", "content": "（中景）荻原明靠在吊椅上，悠闲地翘着腿，手在藤椅扶手边缘轻敲，温和帅气的脸上挂着浅笑。"}},
+  {{"type": "dialogue", "character": "荻原明", "content": "怎么，决定好了吗，霞之丘小姐。", "emotion": "calm", "source_start": 1, "source_end": 1}},
+  {{"type": "action", "content": "（特写·手部）诗羽暗暗咬了咬牙，手指不自觉抓紧腿部内侧，指节发白。"}},
+  {{"type": "dialogue", "character": "霞之丘诗羽", "content": "抱歉，荻原先生，我反悔了。", "emotion": "embarrassed", "source_start": 3, "source_end": 3}}
+]
+```
+
+## 规则
+1. 每个对话前后如有动作描述，单独提取为 action beat
+2. 情绪从角色的动作和上下文推断，不要全部标 calm
+3. 动作描述要包含原文中的细节（身体动作、表情变化等）
+4. 中文引号「」"" 内通常为对白
+5. source_start/source_end 标注对白在段落列表中的索引（从0开始）
 
 只输出 JSON，不要输出其他内容。
 """
@@ -40,15 +78,10 @@ _USER_PROMPT_TPL = """## 角色列表
 
 ## 要求
 
-1. 只识别已知角色的对白
-2. 中文引号「」"" 内通常为对白
-3. 为每个对白标注它在本文本片段中的段落范围（source_start / source_end）
-4. 输出 JSON 数组,格式:
-```json
-[
-  {{"character": "李雷", "content": "你好", "emotion": "happy", "source_start": 3, "source_end": 3}}
-]
-```
+解析以上文本，输出 JSON 数组。每个元素是剧本中的一个 beat。
+对白用 dialogue 类型，动作描述用 action 类型，内心独白用 narration 类型。
+动作描述要包含原文中的细节和镜头指示（中景/近景/特写等）。
+情绪要准确推断，不要全部标 calm。
 """
 
 # 每个片段最大字符数（确保不会超出 LLM 上下文）
@@ -188,13 +221,14 @@ class DialogueParserStep:
                                 "items": {
                                     "type": "object",
                                     "properties": {
+                                        "type": {"type": "string", "enum": ["dialogue", "action", "narration"]},
                                         "character": {"type": "string"},
                                         "content": {"type": "string"},
                                         "emotion": {"type": "string"},
                                         "source_start": {"type": "integer"},
                                         "source_end": {"type": "integer"},
                                     },
-                                    "required": ["character", "content"],
+                                    "required": ["type", "content"],
                                 },
                             },
                         )
@@ -202,30 +236,51 @@ class DialogueParserStep:
                         print(f"[dialogue_parser] LLM 调用失败: {e}，跳过该子块")
                         continue
 
-                    print(f"[dialogue_parser] LLM 返回 {len(raw)} 条对白")
+                    print(f"[dialogue_parser] LLM 返回 {len(raw)} 条 beat")
 
                     for item in raw:
+                        beat_type = item.get("type", "dialogue")
+
                         # 构造 source_location
                         source_loc = None
                         start = item.get("source_start")
                         end = item.get("source_end")
                         if start is not None:
                             source_loc = SourceLocation(
-                                chapter_index=seg_idx,  # 用分段索引作为章节标识
+                                chapter_index=seg_idx,
                                 start_paragraph=int(start),
                                 end_paragraph=int(end or start),
                                 start_offset=0,
                                 end_offset=0,
                             )
 
-                        scene.beats.append(
-                            DialogueBeat(
-                                character=item["character"],
-                                content=item["content"],
-                                emotion=item.get("emotion"),
-                                source_location=source_loc,
+                        if beat_type == "action":
+                            from novel2script.schema import ActionBeat
+                            scene.beats.append(
+                                ActionBeat(
+                                    content=item["content"],
+                                    source_location=source_loc,
+                                )
                             )
-                        )
+                        elif beat_type == "narration":
+                            from novel2script.schema import NarrationBeat
+                            scene.beats.append(
+                                NarrationBeat(
+                                    content=item["content"],
+                                    source_location=source_loc,
+                                )
+                            )
+                        else:
+                            scene.beats.append(
+                                DialogueBeat(
+                                    character=item.get("character", "未知"),
+                                    content=item["content"],
+                                    emotion=item.get("emotion"),
+                                    source_location=source_loc,
+                                )
+                            )
+
+                    # 更新段落偏移
 
                     # 更新段落偏移
                     paragraph_offset += self._count_paragraphs(chunk)
