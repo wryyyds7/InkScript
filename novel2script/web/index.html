@@ -1292,7 +1292,7 @@
                             <div class="bg-white rounded-2xl shadow-sm p-8 space-y-6">
                                 <div>
                                     <label class="block text-sm font-bold text-gray-700 mb-3">AI 提供商</label>
-                                    <select x-model="config.provider" class="w-full p-3 border border-gray-300 rounded-xl bg-white hover:border-indigo-500 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                    <select x-model="config.provider" @change="onProviderChange()" class="w-full p-3 border border-gray-300 rounded-xl bg-white hover:border-indigo-500 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500">
                                         <option value="openai">OpenAI</option>
                                         <option value="deepseek">DeepSeek</option>
                                         <option value="anthropic">Anthropic (Claude)</option>

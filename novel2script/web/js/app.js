@@ -419,6 +419,17 @@ function app() {
             return this.providers[this.config.provider]?.url || '';
         },
 
+        /** 切换 AI 提供商时，自动填入该提供商的默认 API Base URL */
+        onProviderChange() {
+            const provider = this.config.provider;
+            // custom 类型不自动填 URL，让用户自己填
+            if (provider === 'custom') return;
+            const defaultUrl = this.providers[provider]?.url || '';
+            if (defaultUrl) {
+                this.config.base_url = defaultUrl;
+            }
+        },
+
         getModelPlaceholder() {
             return this.providers[this.config.provider]?.modelPlaceholder || '';
         },
