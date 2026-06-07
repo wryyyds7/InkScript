@@ -773,7 +773,7 @@ function app() {
                         model_name: d.model_name || '',
                         temperature: d.temperature ?? 0.7,
                         top_p: d.top_p ?? 1.0,
-                        max_tokens: d.max_tokens || 4096,
+                        max_tokens: d.max_tokens || 8192,
                         frequency_penalty: d.frequency_penalty ?? 0.0,
                         presence_penalty: d.presence_penalty ?? 0.0,
                         timeout: d.timeout || 60,
