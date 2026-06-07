@@ -146,7 +146,7 @@ def start_window(
         else:
             # PyWebView 不可用,回退到系统浏览器
             print(f"[信息] PyWebView 未安装,正在打开系统浏览器...")
-            print(f"[信息] 访问地址: <ADDRESS_REMOVED>
+            print(f"[信息] 访问地址: {url}")
             webbrowser.open(url)
 
             # 保持主线程运行,直到用户手动退出
