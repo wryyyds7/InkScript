@@ -86,7 +86,10 @@ class Pipeline:
             print(f"[Pipeline] 执行步骤: {step.name}")
             # before hooks
             for hook in self._before_hooks:
-                hook(self, step.name, self.ctx)
+                try:
+                    hook(self, step.name, self.ctx)
+                except Exception as e:
+                    print(f"[Pipeline] before_hook 失败: {e}")
 
             # 执行 step
             try:
@@ -98,14 +101,21 @@ class Pipeline:
                 )
                 print(f"[Pipeline] 步骤 {step.name} 完成")
             except Exception as exc:
-                print(f"[Pipeline] 步骤 {step.name} 失败: {exc}")
-                raise RuntimeError(
-                    f"Step [{step.name}] 执行失败:{exc}"
-                ) from exc
+                print(f"[Pipeline] 步骤 {step.name} 失败（跳过继续）: {exc}")
+                # 失败时调用 error hooks 但继续执行后续步骤
+                for hook in self._after_hooks:
+                    try:
+                        hook(self, step.name, self.ctx)
+                    except Exception as e:
+                        print(f"[Pipeline] after_hook 失败: {e}")
+                continue
 
             # after hooks
             for hook in self._after_hooks:
-                hook(self, step.name, self.ctx)
+                try:
+                    hook(self, step.name, self.ctx)
+                except Exception as e:
+                    print(f"[Pipeline] after_hook 失败: {e}")
 
         return current
 
