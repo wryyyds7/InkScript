@@ -105,6 +105,7 @@ class OpenAIClient:
         """调用 LLM 并要求返回符合 JSON Schema 的 JSON 字符串"""
         import json
 
+        print(f"[LLM chat_json] 开始, schema type={schema.get('type')}, messages count={len(messages)}")
         # 判断期望的是数组还是对象
         is_array = schema.get("type") == "array"
 
@@ -124,6 +125,7 @@ class OpenAIClient:
                 },
             )
 
+        print(f"[LLM chat_json] 准备调用 chat(), response_format={'json_object' if not is_array else 'None'}")
         raw = self.chat(
             constrained_messages,
             # 数组类型不传 response_format（某些 LLM 不支持 json_object 返回数组）
