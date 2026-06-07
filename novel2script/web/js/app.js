@@ -1302,6 +1302,11 @@ function app() {
                 this.showToast('转换完成！');
             });
 
+            this.eventSource.addEventListener('warning', (e) => {
+                const d = JSON.parse(e.data);
+                this.showToast(d.message, 'warning');
+            });
+
             this.eventSource.addEventListener('task_failed', (e) => {
                 const d = JSON.parse(e.data);
                 this.converting = false;
@@ -2150,16 +2155,21 @@ function app() {
         },
 
         // ── 工具方法 ─────────────────────
-        showToast(message) {
+        showToast(message, type = 'success') {
             const toast = document.createElement('div');
-            toast.className = 'fixed bottom-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 transition-opacity';
+            const colors = {
+                success: 'bg-green-600',
+                warning: 'bg-yellow-500 text-black',
+                error: 'bg-red-600',
+            };
+            toast.className = `fixed bottom-4 right-4 ${colors[type] || colors.success} text-white px-4 py-2 rounded-lg shadow-lg z-50 transition-opacity duration-300`;
             toast.setAttribute('aria-live', 'polite');
             toast.textContent = message;
             document.body.appendChild(toast);
             setTimeout(() => {
                 toast.style.opacity = '0';
                 setTimeout(() => toast.remove(), 300);
-            }, 2000);
+            }, 4000);
         },
 
         // ── EditMeta 编辑器元数据 ─────────────────────

@@ -362,7 +362,29 @@ async def _run_pipeline(task_id: str, project_id: str, store: FileSystemProjectS
         # 运行转换
         print(f"[转换] 开始运行 Pipeline...")
         result_script = pipeline.run(script, novel_text)
-        print(f"[转换] Pipeline 执行完成, scenes={len(result_script.scenes)}")
+        print(f"[转换] Pipeline 执行完成, scenes={len(result_script.scenes)}, characters={len(result_script.characters)}")
+
+        # 检查结果质量
+        if not result_script.characters and not result_script.scenes:
+            asyncio.run_coroutine_threadsafe(
+                sse_manager.push_event(task_id, {
+                    "event": "warning",
+                    "data": json.dumps({
+                        "message": "未识别到角色和场景，请确认粘贴的是小说内容（含对白和场景描述）。",
+                    }, ensure_ascii=False),
+                }),
+                asyncio.get_event_loop(),
+            )
+        elif not result_script.characters:
+            asyncio.run_coroutine_threadsafe(
+                sse_manager.push_event(task_id, {
+                    "event": "warning",
+                    "data": json.dumps({
+                        "message": "未识别到角色，请确认小说内容包含人物对白。",
+                    }, ensure_ascii=False),
+                }),
+                asyncio.get_event_loop(),
+            )
 
         # 保存结果
         store.save_script(project_id, result_script)
