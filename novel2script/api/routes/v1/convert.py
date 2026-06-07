@@ -386,9 +386,24 @@ async def _run_pipeline(task_id: str, project_id: str, store: FileSystemProjectS
                 asyncio.get_event_loop(),
             )
 
-        # 保存结果
+        # 保存结果（YAML）
         store.save_script(project_id, result_script)
-        print(f"[转换] 结果已保存到项目 {project_id}")
+        print(f"[转换] YAML 已保存到项目 {project_id}")
+
+        # 生成本地格式导出文件（不调 API）
+        from novel2script.core.format_converter import script_to_txt, script_to_html, script_to_fountain
+        txt_content = script_to_txt(result_script)
+        html_content = script_to_html(result_script)
+        fountain_content = script_to_fountain(result_script)
+
+        # 保存导出文件到项目目录
+        import os as _os
+        from pathlib import Path as _Path
+        proj_dir = _Path(store._project_path(project_id))
+        (proj_dir / "script.txt").write_text(txt_content, encoding="utf-8")
+        (proj_dir / "script.html").write_text(html_content, encoding="utf-8")
+        (proj_dir / "script.fountain").write_text(fountain_content, encoding="utf-8")
+        print(f"[转换] TXT/HTML/Fountain 导出完成")
 
         
 
