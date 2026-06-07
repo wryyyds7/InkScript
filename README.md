@@ -1,70 +1,88 @@
-# InkScript (Novel2Script)
+# 🎬 InkScript — 小说智能转剧本
 
-> 将小说自动转换为结构化剧本的桌面应用
+> 粘贴小说 → AI 自动识别角色/场景/对白/情绪 → 生成带镜头指示的结构化剧本
 
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/framework-FastAPI-green.svg)](https://fastapi.tiangolo.com/)
-
----
-
-## 📖 简介
-
-InkScript 是一款本地安装的桌面级应用，用于将小说文本自动转换为结构化剧本 YAML。支持双启动模式（桌面应用 / Web 服务），内置编辑器，项目管理，以及可扩展的 Skill 系统。
-
-### 核心特性
-
-- ✅ **自动转换**：基于 LLM 的智能转换（角色识别、场景分割、对白解析、情绪标注）
-- ✅ **双启动模式**：桌面应用（PyWebView）或 Web 服务（FastAPI）
-- ✅ **内置编辑器**：小说原文和剧本 YAML 双面板编辑
-- ✅ **项目管理**：创建、保存、加载项目
-- ✅ **Skill 系统**：可扩展的插件系统
-- ✅ **SSE 进度推送**：实时显示转换进度
-- ✅ **用户自选 AI**：支持 OpenAI API 及兼容服务
+[![Python](https://img.shields.io/badge/python-3.10+-blue)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-green)](https://fastapi.tiangolo.com/)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![Status](https://img.shields.io/badge/status-V1%20ready-brightgreen)]()
 
 ---
 
-## 🚀 快速开始
+## ✨ 为什么选择 InkScript？
 
-### 安装
+| 优势 | 说明 |
+|------|------|
+| 🎬 **AI 生成镜头指示** | 自动添加（中景/近景/特写/闪回/叠化）等专业镜头语言 |
+| 😊 **13 种情绪标注** | happy/sad/angry/calm/excited/fear/surprised 等，精准情绪分析 |
+| 📊 **可视化分析** | 角色情绪雷达图 + 全局情绪曲线，一图看清水剧情感起伏 |
+| 🔌 **11 个内置 Skills** | 角色分析/选角建议/HTML导出/分镜生成 等，插件式即开即用 |
+| 📤 **4 种导出格式** | YAML / TXT / HTML / Fountain，一键导出 |
+| ⚡ **容错不中断** | 单步 AI 调用失败自动跳过，宁可部分结果也不白等 |
+| 💾 **纯本地存储** | 数据在 `~/.novel2script/`，完全离线可用 |
+| 🖱️ **拖拽式节拍板** | 卡片式 Beat 编辑，SortableJS 拖拽排序 |
+
+---
+
+## 🚀 30 秒快速开始
 
 ```bash
-# 克隆仓库
 git clone https://github.com/wryyyds7/InkScript.git
 cd InkScript
-
-# 安装依赖
-pip install -e ".[dev]"
-
-# 配置 API Key
-novel2script config
-```
-
-### 使用
-
-#### 1. 桌面模式（默认）
-
-```bash
+pip install -e .
 novel2script gui
 ```
 
-启动 PyWebView 桌面窗口，内置编辑器。
+浏览器自动打开 → 新建项目 → 粘贴小说 → 配置 API Key → 点击「开始转换」。
 
-#### 2. Web 服务模式
+支持 **DeepSeek / OpenAI / Anthropic / 通义千问 / Gemini** 等所有 OpenAI 兼容 API。
 
-```bash
-novel2script serve --port 8000
+---
+
+## 🎯 核心功能
+
+### AI 转换引擎 — 6 步自动转换
+
+```
+小说原文
+  → 文本分段 (text_splitter)
+  → AI 识别角色 (character_extractor) — 提取姓名/别名/外貌性格描述
+  → AI 分割场景 (scene_splitter)     — 按地点/时间变化自动切分
+  → AI 解析对白 (dialogue_parser)    — ⭐ 输出 dialogue/action/narration 三种 beat
+  → AI 标注情绪 (emotion_tagger)     — 13 种情绪自动标注
+  → 生成 YAML (yaml_generator)       — 结构化剧本 + 统计信息
 ```
 
-启动 FastAPI Web 服务，在浏览器中打开 `http://127.0.0.1:8000`。
+### 编辑器 — CodeMirror 6 双面板
 
-#### 3. CLI 直接转换
+- **左侧**：小说原文编辑器（可编辑/导入 txt/docx/pdf）
+- **右侧**：剧本 YAML 编辑器（语法高亮 + 实时 lint）
+- **滚动联动**：点击右侧 beat → 左侧自动跳转到原文位置
+- **节拍板**：卡片式 Beat 视图，拖拽排序
+- **自动保存**：2 秒防抖，不丢数据
 
-```bash
-novel2script convert input.txt output.yaml --model gpt-4
-```
+### 分析面板
 
-直接在命令行中转换小说为剧本 YAML。
+- **角色雷达图** (Chart.js) — 六维情绪分布一目了然
+- **情绪曲线** (折线图) — Beat 级 / 场景级粒度切换，点击数据点定位原文
+
+### Skills 插件系统
+
+11 个内置 Skill，可手动运行或集成到转换 Pipeline：
+
+| Skill | 功能 |
+|-------|------|
+| `character-analysis` | 角色对白统计与情绪分布 |
+| `character-profile` | 人物小传生成 |
+| `chapter-summary` | 章节摘要 |
+| `casting-suggester` | 选角建议（含匹配度） |
+| `structure-analytics` | 剧本结构分析 |
+| `storyboard-gen` | 分镜建议 |
+| `fountain-export` | Fountain 格式导出 |
+| `html-export` | 自包含 HTML 导出 |
+| `dialogue-polish` | 对白润色 |
+| `style-adapt` | 风格适配 |
+| `props-list-gen` | 道具列表生成 |
 
 ---
 
@@ -72,153 +90,53 @@ novel2script convert input.txt output.yaml --model gpt-4
 
 ```
 InkScript/
-├── novel2script/              # 主包
-│   ├── api/                  # FastAPI 后端
-│   ├── core/                 # 核心转换逻辑
-│   ├── desktop/              # 桌面窗口（PyWebView）
-│   ├── skills/               # Skill 系统
-│   ├── web/                  # 前端静态文件
-│   ├── cli.py                # CLI 入口
-│   ├── config.py             # 配置管理
-│   └── schema.py             # Pydantic 数据模型
-├── tests/                    # 测试
-├── docs/                     # 设计文档
-├── scripts/                  # 脚本
-├── pyproject.toml           # 项目配置
-└── README.md                # 本文件
+├── novel2script/
+│   ├── api/           # FastAPI 后端 + SSE
+│   ├── core/          # Pipeline 引擎 + 格式转换 + 项目存储
+│   │   └── steps/     # 6 个 Pipeline 步骤
+│   ├── desktop/       # PyWebView 桌面窗口
+│   ├── skills/        # 11 个内置 Skills
+│   ├── web/           # 前端 (Alpine.js + CodeMirror 6)
+│   ├── cli.py         # CLI 入口
+│   ├── config.py      # 配置管理
+│   ├── llm_client.py  # LLM 客户端封装
+│   └── schema.py      # Pydantic 数据模型
+├── docs/              # 设计文档
+├── tests/             # 测试 (21 个全部通过)
+└── pyproject.toml     # 项目配置
 ```
 
 ---
 
-## 🧩 核心功能
+## 🛠️ 技术栈
 
-### 1. 项目管理
+| 层级 | 技术 |
+|------|------|
+| 后端 | Python 3.10+ / FastAPI / Uvicorn / Pydantic V2 |
+| AI | OpenAI SDK (兼容 DeepSeek/OpenAI/Anthropic 等) |
+| 桌面 | PyWebView |
+| 前端 | Alpine.js / Tailwind CSS / CodeMirror 6 |
+| 图表 | Chart.js / SortableJS |
+| 存储 | 文件系统 (JSON + YAML) |
 
-- 创建项目
-- 保存/加载小说原文
-- 保存/加载剧本 YAML
-- 删除项目
+---
 
-### 2. 转换 Pipeline
+## 📚 文档
 
-转换过程分为 5 个步骤：
-
-1. **角色识别** (`character_extractor`)：从小说中提取所有角色
-2. **场景分割** (`scene_splitter`)：按时空变化分割场景
-3. **对白解析** (`dialogue_parser`)：识别对白、动作、旁白
-4. **情绪标注** (`emotion_tagger`)：为每个 Beat 标注情绪
-5. **YAML 生成** (`yaml_generator`)：生成结构化剧本 YAML
-
-### 3. Skill 系统
-
-可扩展的插件系统，支持：
-
-- `pre_processor`：转换前处理
-- `post_processor`：转换后处理
-- `exporter`：导出功能
-- `analyzer`：分析功能
-
-内置 Skill：
-
-- `fountain_export`：YAML → Fountain 导出
-- `character_report`：角色分析
-- `dialogue_polish`：对白润色
-- `style_adapter`：风格适配
-- `chapter_summary`：章节概要
+- **[InkScript项目详细文档.md](docs/InkScript项目详细文档.md)** — 综合项目文档（架构/流程/Skills/路线图）
+- **[02-数据模型与API.md](docs/02-数据模型与API.md)** — 14 个数据模型 + 49 个 API 端点完整参考
+- **[项目完整源码文档.md](docs/项目完整源码文档.md)** — 69 个文件完整源码
 
 ---
 
 ## 🧪 测试
 
 ```bash
-# 运行所有测试
-pytest tests/ -v
-
-# 运行特定测试
-pytest tests/test_pipeline.py -v
-pytest tests/integration/test_api.py -v
+pytest tests/ -v    # 21 个测试全部通过
 ```
-
-当前测试覆盖：
-
-- ✅ 单元测试：17 个
-- ✅ 集成测试：4 个
-- ✅ 总计：21 个（全部通过）
-
----
-
-## 📚 文档
-
-设计文档位于 `docs/` 目录：
-
-- `PRD.md` - 产品需求文档
-- `architecture.md` - 系统架构设计
-- `api-design.md` - API 接口设计
-- `yaml-schema.md` - 剧本 YAML Schema 设计
-- `extensibility-design-spec.md` - 扩展性设计详细规范
-- `prompt-design.md` - Prompt 工程设计
-- `agent-collaboration-plan.md` - Agent 协作计划
-
----
-
-## 🛠️ 技术栈
-
-| 技术 | 版本 | 用途 |
-|------|------|------|
-| Python | 3.10+ | 后端语言 |
-| FastAPI | 0.110+ | Web 框架 |
-| Pydantic | 2.5+ | 数据验证 |
-| PyWebView | 5.0+ | 桌面窗口 |
-| Alpine.js | 3.x | 前端框架 |
-| CodeMirror 6 | - | 代码编辑器 |
-| PyInstaller | - | 打包工具 |
-
----
-
-## 📝 开发计划
-
-### V1（当前版本）
-
-- ✅ 核心转换功能
-- ✅ 双启动模式
-- ✅ 内置编辑器
-- ✅ 项目管理
-- 🚧 前端编辑器完善（进行中）
-- 📝 用户手册编写
-- 📦 PyInstaller 打包
-
-### V2（计划中）
-
-- 章节管理
-- 角色关系图谱
-- 对白润色 Skill
-- 风格适配 Skill
-
-### V3（计划中）
-
-- 多人协作
-- 云端同步
-- 移动端支持
-
----
-
-## 🤝 贡献
-
-欢迎贡献！请查看 `docs/developer-guide.md`（待编写）了解如何贡献代码。
 
 ---
 
 ## 📄 许可证
 
 MIT License
-
----
-
-## 📧 联系
-
-- 项目仓库：https://github.com/wryyyds7/InkScript
-- 问题反馈：https://github.com/wryyyds7/InkScript/issues
-
----
-
-**最后更新**：2026-06-05
