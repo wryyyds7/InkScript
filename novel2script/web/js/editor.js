@@ -119,8 +119,8 @@ export function initScriptEditor(container, content = "", opts = {}) {
             }),
 
             // ── 点击 Beat 滚动联动 ─────────
-            EditorView.mouseEventListener.of((event, view) => {
-                if (event.type === "click") {
+            EditorView.domEventHandlers({
+                click: (event, view) => {
                     const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
                     if (pos !== null) {
                         const line = view.state.doc.lineAt(pos);
@@ -129,8 +129,8 @@ export function initScriptEditor(container, content = "", opts = {}) {
                             detail: { line: line.number, pos },
                         }));
                     }
-                }
-                return false;
+                    return false;
+                },
             }),
         ],
     });
