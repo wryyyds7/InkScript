@@ -1444,14 +1444,15 @@ function app() {
         },
 
         /** 切换 Skill 启用/禁用状态 */
-        async toggleSkill(name) {
+        async toggleSkill(skill) {
+            const skillName = typeof skill === 'string' ? skill : skill.name || skill.id;
             try {
-                const res = await fetch(`/api/v1/skills/${name}/toggle`, {
+                const res = await fetch(`/api/v1/skills/${skillName}/toggle`, {
                     method: 'POST',
                 });
                 const data = await res.json();
                 if (data.code === 0) {
-                    this.showToast(`Skill "${name}" ${data.data.enabled ? '已启用' : '已禁用'}`);
+                    this.showToast(`Skill "${skillName}" ${data.data.enabled ? '已启用' : '已禁用'}`);
                     await this.loadSkills();
                 } else {
                     alert('操作失败: ' + data.message);
@@ -1462,14 +1463,17 @@ function app() {
         },
 
         /** 运行指定 Skill */
-        async runSkill(name) {
+        async runSkill(skill) {
             if (!this.activeProject) {
                 alert('请先打开一个项目');
                 return;
             }
 
+            // 兼容传入对象或字符串
+            const skillName = typeof skill === 'string' ? skill : skill.name || skill.id;
+
             try {
-                const res = await fetch(`/api/v1/skills/${name}/run`, {
+                const res = await fetch(`/api/v1/skills/${skillName}/run`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
