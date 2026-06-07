@@ -74,7 +74,7 @@ class AppConfig(BaseSettings):
     llm_model_name: str = "gpt-4o-mini"
     llm_temperature: float = Field(0.7, ge=0.0, le=2.0)
     llm_top_p: float = Field(1.0, ge=0.0, le=1.0)
-    llm_max_tokens: int = Field(4096, ge=1)
+    llm_max_tokens: int = Field(8192, ge=1)
     llm_frequency_penalty: float = Field(0.0, ge=0.0, le=2.0)
     llm_presence_penalty: float = Field(0.0, ge=0.0, le=2.0)
     llm_request_timeout: float = Field(60.0, ge=1.0)
