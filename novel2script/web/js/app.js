@@ -2321,7 +2321,7 @@ function app() {
             }
         },
 
-        /** 下载文件到用户下载文件夹 */
+        /** 下载文件到用户下载文件夹（C:\Users\用户名\Downloads） */
         async downloadFile(file) {
             if (!this.activeProject) return;
 
@@ -2329,16 +2329,30 @@ function app() {
                 this.downloadingFile = true;
                 const url = `/api/v1/projects/${this.activeProject.id}/files/download?file_path=${encodeURIComponent(file.path)}`;
                 
-                // 创建下载链接
+                // 方法1：使用 fetch 下载并创建 Blob 触发下载（更可靠）
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`下载失败: ${response.statusText}`);
+                }
+                
+                const blob = await response.blob();
+                const blobUrl = URL.createObjectURL(blob);
+                
+                // 创建下载链接并触发下载
                 const a = document.createElement('a');
-                a.href = url;
-                a.download = file.name;
-                a.target = '_blank';
+                a.href = blobUrl;
+                a.download = file.name;  // 设置下载文件名
+                a.style.display = 'none';
                 document.body.appendChild(a);
                 a.click();
-                document.body.removeChild(a);
-
-                this.showToast(`开始下载：${file.name}`);
+                
+                // 清理
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(blobUrl);
+                }, 100);
+                
+                this.showToast(`正在下载：${file.name}`);
             } catch (e) {
                 console.error('下载文件失败:', e);
                 alert('下载失败：' + e.message);
