@@ -1,5 +1,7 @@
 # 🎬 InkScript — 小说智能转剧本
 
+> 📺 **讲解视频**：[百度网盘下载](https://pan.baidu.com/s/1nrcyVrfKZSM1n8EFGi5CLg?pwd=1234) 提取码: 1234
+
 > 粘贴小说 → AI 自动识别角色/场景/对白/情绪 → 生成带镜头指示的结构化剧本
 
 [![Python](https://img.shields.io/badge/python-3.10+-blue)](https://www.python.org/)
