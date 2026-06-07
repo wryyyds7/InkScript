@@ -655,6 +655,9 @@ async def import_file(
     except UnicodeDecodeError:
         raise HTTPException(status_code=400, detail="文件编码错误，请确保文件是 UTF-8 编码")
     except Exception as e:
+        import traceback
+        print(f"[ERROR] 文件导入失败: {str(e)}")
+        print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"文件解析失败：{str(e)}")
 
 

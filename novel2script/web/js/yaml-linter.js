@@ -6,7 +6,7 @@
  */
 
 import { linter } from "@codemirror/lint";
-import { yaml as yamlParse } from "yaml";
+import yaml from "yaml";
 
 // ── Script YAML Schema 定义 ────────────────────────────────────────────
 
@@ -24,7 +24,7 @@ export function lintScriptYaml(text) {
     // 1. 解析 YAML（捕获解析错误）
     let doc;
     try {
-        doc = yamlParse.parse(text, { keepSourceTokens: true });
+        doc = yaml.parse(text, { keepSourceTokens: true });
     } catch (e) {
         // YAML 语法错误
         const msg = e.message || "YAML 解析错误";
