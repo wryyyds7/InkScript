@@ -792,6 +792,11 @@ function app() {
             if (this.config.api_key) {
                 payload.api_key = this.config.api_key;
             }
+
+            // 找到触发保存的按钮（多个设置面板都有保存按钮）
+            const btn = document.querySelector('[x-on:click*="saveConfig"]') ||
+                        document.querySelector('button[class*="btn-primary"]');
+            const originalText = btn ? btn.textContent : '保存设置';
             
             try {
                 const res = await fetch('/api/v1/config', {
@@ -802,14 +807,16 @@ function app() {
                 const data = await res.json();
                 if (data.code === 0) {
                     // 显示保存成功提示
-                    const btn = event.target;
-                    const originalText = btn.textContent;
-                    btn.textContent = '已保存！';
-                    btn.disabled = true;
-                    setTimeout(() => {
-                        btn.textContent = originalText;
-                        btn.disabled = false;
-                    }, 1500);
+                    if (btn) {
+                        btn.textContent = '已保存！';
+                        btn.disabled = true;
+                        setTimeout(() => {
+                            btn.textContent = originalText;
+                            btn.disabled = false;
+                        }, 1500);
+                    } else {
+                        this.showToast('设置已保存！');
+                    }
                 } else {
                     alert('保存失败: ' + data.message);
                 }
