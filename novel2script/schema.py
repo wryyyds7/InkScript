@@ -268,9 +268,17 @@ def to_yaml(script: Script) -> str:
     )
 
 
+
 def from_yaml(yaml_str: str) -> Script:
     """从 YAML 字符串解析 Script"""
+    if not yaml_str:
+        # 返回空的 Script 对象
+        return Script(business={}, characters=[], beats=[])
+    
     import yaml
 
     raw = yaml.safe_load(yaml_str)
+    if not raw:
+        return Script(business={}, characters=[], beats=[])
+    
     return Script.model_validate(raw)

@@ -3,7 +3,7 @@
  * 提供 initNovelEditor / initScriptEditor 两个工厂函数
  */
 
-import { EditorState, StateEffect } from "codemirror";
+import { EditorState, StateEffect } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { indentOnInput, syntaxHighlighting, defaultHighlightStyle, bracketMatching, foldGutter, indentUnit } from "@codemirror/language";
@@ -47,7 +47,7 @@ export function initNovelEditor(container, content = "", opts = {}) {
             EditorView.theme({
                 "&": { height: "100%", fontSize: "13px" },
                 ".cm-scroller": { overflow: "auto" },
-                ".cm-content": { fontFamily: '"Fira Code", "Courier New", monospace' },
+                ".cm-content": { fontFamily: "'Fira Code', 'Courier New', monospace" },
                 ".cm-gutters": { backgroundColor: "#f9fafb", borderRight: "1px solid #e5e7eb" },
             }),
 
@@ -104,7 +104,7 @@ export function initScriptEditor(container, content = "", opts = {}) {
             EditorView.theme({
                 "&": { height: "100%", fontSize: "13px" },
                 ".cm-scroller": { overflow: "auto" },
-                ".cm-content": { fontFamily: '"Fira Code", "Courier New", monospace' },
+                ".cm-content": { fontFamily: "'Fira Code', 'Courier New', monospace" },
                 ".cm-gutters": { backgroundColor: "#f9fafb", borderRight: "1px solid #e5e7eb" },
                 ".cm-activeLine": { backgroundColor: "#eff6ff" },
                 ".cm-activeLineGutter": { backgroundColor: "#dbeafe" },

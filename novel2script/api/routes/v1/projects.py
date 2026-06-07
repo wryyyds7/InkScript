@@ -212,10 +212,16 @@ def save_script(
 ):
     """保存剧本 YAML"""
     yaml_str = body.get("yaml", "")
+    if not yaml_str:
+        raise HTTPException(status_code=400, detail="剧本内容不能为空")
+    
     from novel2script.schema import from_yaml
-    script = from_yaml(yaml_str)
-    store.save_script(project_id, script)
-    return {"code": 0, "message": "已保存"}
+    try:
+        script = from_yaml(yaml_str)
+        store.save_script(project_id, script)
+        return {"code": 0, "message": "已保存"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"保存失败: {str(e)}")
 
 
 @router.get("/{project_id}/download")
@@ -573,7 +579,7 @@ def update_edit_meta(
 @router.post("/{project_id}/import-file")
 async def import_file(
     project_id: str,
-    file: UploadFile = File(...),
+    file: UploadFile,
     store: FileSystemProjectStore = Depends(get_store),
 ):
     """
