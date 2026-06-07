@@ -1279,10 +1279,15 @@ function app() {
         connectSSE(taskId) {
             if (this.eventSource) this.eventSource.close();
 
-            const url = `/api/v1/convert/${taskId}/progress`;
+            const url = `/api/v1/convert/${taskId}/sse`;
             this.eventSource = new EventSource(url);
 
-            this.eventSource.addEventListener('step_progress', (e) => {
+            this.eventSource.addEventListener('step_start', (e) => {
+                const d = JSON.parse(e.data);
+                this.currentStep = d.step;
+            });
+
+            this.eventSource.addEventListener('step_complete', (e) => {
                 const d = JSON.parse(e.data);
                 this.progress = d.percent;
                 this.currentStep = d.step;
