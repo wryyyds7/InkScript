@@ -113,6 +113,11 @@ function app() {
         showTrash: false,        // 是否显示回收站
         trashItems: [],          // 回收站项目列表
 
+        // 文件管理
+        showFileManager: false,  // 是否显示文件管理面板
+        projectFiles: [],        // 项目文件列表
+        downloadingFile: false,  // 是否正在下载文件
+
         // 编辑器分栏拖拽
         leftPanelWidth: 50,        // 左侧面板宽度百分比（可拖拽调整）
         _dragStartX: 0,           // 拖拽起始位置
@@ -2279,6 +2284,72 @@ function app() {
             window.addEventListener('beforeunload', () => {
                 this.saveEditMeta();
             });
+        },
+
+        // ── 文件管理功能 ─────────────────────
+
+        /** 切换文件管理面板 */
+        async toggleFileManager() {
+            this.showFileManager = !this.showFileManager;
+            if (this.showFileManager && this.activeProject) {
+                await this.loadProjectFiles();
+            }
+        },
+
+        /** 加载项目文件列表 */
+        async loadProjectFiles() {
+            if (!this.activeProject) return;
+
+            try {
+                const res = await fetch(`/api/v1/projects/${this.activeProject.id}/files`);
+                const data = await res.json();
+                if (data.code === 0) {
+                    this.projectFiles = data.data || [];
+                }
+            } catch (e) {
+                console.error('加载项目文件失败:', e);
+            }
+        },
+
+        /** 下载文件到用户下载文件夹 */
+        async downloadFile(file) {
+            if (!this.activeProject) return;
+
+            try {
+                this.downloadingFile = true;
+                const url = `/api/v1/projects/${this.activeProject.id}/files/download?file_path=${encodeURIComponent(file.path)}`;
+                
+                // 创建下载链接
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = file.name;
+                a.target = '_blank';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+
+                this.showToast(`开始下载：${file.name}`);
+            } catch (e) {
+                console.error('下载文件失败:', e);
+                alert('下载失败：' + e.message);
+            } finally {
+                this.downloadingFile = false;
+            }
+        },
+
+        /** 格式化文件大小 */
+        formatFileSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        },
+
+        /** 格式化修改时间 */
+        formatFileTime(timestamp) {
+            const date = new Date(timestamp * 1000);
+            return date.toLocaleString('zh-CN');
         },
     };
 }

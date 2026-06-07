@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel
 
 from novel2script.core.project_store import FileSystemProjectStore
@@ -650,4 +650,65 @@ async def import_file(
         raise HTTPException(status_code=400, detail="文件编码错误，请确保文件是 UTF-8 编码")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"文件解析失败：{str(e)}")
+
+
+# ── 文件管理 API ─────────────────────────────
+
+@router.get("/{project_id}/files")
+def list_project_files(
+    project_id: str,
+    store: FileSystemProjectStore = Depends(get_store),
+):
+    """列出项目目录中的所有文件"""
+    if not store.get_project(project_id):
+        raise HTTPException(status_code=404, detail="项目不存在")
+    
+    project_dir = store._project_path(project_id)
+    
+    if not project_dir.exists():
+        return {"code": 0, "data": []}
+    
+    files = []
+    for file_path in project_dir.rglob("*"):
+        if file_path.is_file():
+            relative_path = file_path.relative_to(project_dir)
+            files.append({
+                "name": file_path.name,
+                "path": str(relative_path),
+                "size": file_path.stat().st_size,
+                "modified_at": file_path.stat().st_mtime,
+            })
+    
+    return {"code": 0, "data": files}
+
+
+@router.get("/{project_id}/files/download")
+def download_project_file(
+    project_id: str,
+    file_path: str,
+    store: FileSystemProjectStore = Depends(get_store),
+):
+    """下载项目中的文件"""
+    if not store.get_project(project_id):
+        raise HTTPException(status_code=404, detail="项目不存在")
+    
+    # 安全检查：防止路径遍历攻击
+    project_dir = store._project_path(project_id)
+    full_path = (project_dir / file_path).resolve()
+    
+    if not str(full_path).startswith(str(project_dir.resolve())):
+        raise HTTPException(status_code=403, detail="禁止访问项目目录外的文件")
+    
+    if not full_path.exists() or not full_path.is_file():
+        raise HTTPException(status_code=404, detail="文件不存在")
+    
+    from fastapi.responses import FileResponse
+    return FileResponse(
+        path=full_path,
+        filename=full_path.name,
+        media_type='application/octet-stream'
+    )
+
+
+
 

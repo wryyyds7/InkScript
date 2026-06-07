@@ -17,11 +17,12 @@ from pathlib import Path
 from novel2script.config import get_config
 
 # 尝试导入 PyWebView,如果失败则标记为不可用
+_pywebview_available = False  # 先定义为不可用
+webview = None  # 先定义为 None
 try:
     import webview
-    _PYWEBVIEW_AVAILABLE = True
+    _pywebview_available = True
 except ImportError:
-    _PYWEBVIEW_AVAILABLE = False
     print("[警告] PyWebView 未安装,将使用系统浏览器模式")
 
 # 单实例锁(socket)
@@ -45,6 +46,43 @@ def _acquire_single_instance() -> bool:
     except OSError:
         # 端口已被占用,说明已有实例在运行
         return False
+
+
+def _is_port_in_use(port: int, host: str = "127.0.0.1") -> bool:
+    """检查端口是否被占用
+    
+    Args:
+        port: 端口号
+        host: 主机地址
+        
+    Returns:
+        bool: 如果端口被占用返回 True,否则返回 False
+    """
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind((host, port))
+            return False  # 绑定成功,端口未被占用
+    except OSError:
+        return True  # 绑定失败,端口已被占用
+
+
+def _find_available_port(start_port: int, host: str = "127.0.0.1", max_attempts: int = 100) -> int:
+    """查找可用的端口
+    
+    Args:
+        start_port: 起始端口号
+        host: 主机地址
+        max_attempts: 最大尝试次数
+        
+    Returns:
+        int: 可用的端口号
+    """
+    for i in range(max_attempts):
+        port = start_port + i
+        if not _is_port_in_use(port, host):
+            return port
+    # 如果累计尝试100个端口都失败,返回原端口(让系统报错)
+    return start_port
 
 
 def _release_single_instance():
@@ -100,7 +138,15 @@ def start_window(
         port = port or cfg.port
         title = title or cfg.app_name
 
-        # 1. 启动 FastAPI 后端(后台线程)
+        # 1. 检查端口是否被占用，如果被占用则查找可用端口
+        original_port = port
+        if _is_port_in_use(port, host):
+            print(f"[警告] 端口 {port} 已被占用，正在查找可用端口...")
+            port = _find_available_port(port, host)
+            if port != original_port:
+                print(f"[信息] 已切换到端口 {port}")
+        
+        # 2. 启动 FastAPI 后端(后台线程)
         server_thread = threading.Thread(
             target=_start_server,
             args=(host, port),
@@ -108,7 +154,7 @@ def start_window(
         )
         server_thread.start()
 
-        # 2. 等待后端就绪(最多 10 秒)
+        # 3. 等待后端就绪(最多 10 秒)
         import urllib.request
         deadline = time.time() + 10
         ready = False
@@ -123,40 +169,48 @@ def start_window(
         if not ready:
             raise RuntimeError("后端服务启动超时,请检查端口是否被占用")
 
-        # 3. 根据 PyWebView 可用性选择窗口模式
-        url = f"http://{host}:{port}/"
-
-        if _PYWEBVIEW_AVAILABLE:
-            # 使用 PyWebView 创建桌面窗口
-            window = webview.create_window(
-                title=title,
-                url=url,
-                width=width,
-                height=height,
-                min_size=(800, 600),
-                resizable=True,
-                text_select=True,
-                confirm_close=True,  # 关闭前确认
-            )
-
-            # 启动事件循环(阻塞,直到窗口关闭)
-            webview.start(
-                debug=cfg.debug,  # debug=True 时打开 DevTools
-            )
-        else:
-            # PyWebView 不可用,回退到系统浏览器
-            print(f"[信息] PyWebView 未安装,正在打开系统浏览器...")
-            print(f"[信息] 访问地址: {url}")
-            webbrowser.open(url)
-
-            # 保持主线程运行,直到用户手动退出
-            try:
-                while True:
-                    time.sleep(1)
-            except KeyboardInterrupt:
-                print("\n[信息] 正在退出...")
-                return
-
-    finally:
-        # 释放单实例锁
+    except RuntimeError as e:
+        print(f"[错误] 启动失败: {e}")
         _release_single_instance()
+        return
+    except Exception as e:
+        print(f"[错误] 未知错误: {e}")
+        _release_single_instance()
+        return
+
+    # 4. 根据 PyWebView 可用性选择窗口模式
+    url = f"http://{host}:{port}/"
+
+    if webview is not None:
+        # 使用 PyWebView 创建桌面窗口
+        window = webview.create_window(
+            title=title,
+            url=url,
+            width=width,
+            height=height,
+            min_size=(800, 600),
+            resizable=True,
+            text_select=True,
+            confirm_close=True,  # 关闭前确认
+        )
+
+        # 启动事件循环(阻塞,直到窗口关闭)
+        webview.start(
+            debug=cfg.debug,  # debug=True 时打开 DevTools
+        )
+    else:
+        # PyWebView 不可用,回退到系统浏览器
+        print("[信息] PyWebView 未安装,正在打开系统浏览器...")
+        print("[信息] 访问地址: " + url)
+        webbrowser.open(url)
+
+        # 保持主线程运行,直到用户手动退出
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("\n[信息] 正在退出...")
+            return
+
+    # 释放单实例锁
+    _release_single_instance()

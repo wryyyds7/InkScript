@@ -564,6 +564,12 @@
                             </svg>
                             节拍板
                         </button>
+                        <button @click="toggleFileManager()" class="btn-secondary" aria-label="打开文件管理">
+                            <svg class="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+                            </svg>
+                            文件
+                        </button>
                     </div>
                 </div>
                 
@@ -868,6 +874,46 @@
                                 </div>
                             </div>
                         </template>
+                    </div>
+                </template>
+
+                <!-- 文件管理面板 -->
+                <template x-if="showFileManager">
+                    <div class="mt-4 bg-white rounded-xl shadow-sm p-6 animate-fade-in">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-bold text-gray-900">📁 文件管理</h3>
+                            <button @click="toggleFileManager()" class="text-gray-400 hover:text-gray-600">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                </svg>
+                            </button>
+                        </div>
+
+                        <div x-show="projectFiles.length === 0" class="text-sm text-gray-500 text-center py-4">
+                            暂无文件
+                        </div>
+
+                        <div x-show="projectFiles.length > 0" class="space-y-2 max-h-64 overflow-y-auto">
+                            <template x-for="file in projectFiles" :key="file.path">
+                                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                                    <div class="flex-1 min-w-0">
+                                        <div class="font-medium text-sm text-gray-900 truncate" x-text="file.name"></div>
+                                        <div class="text-xs text-gray-500 mt-1">
+                                            <span x-text="formatFileSize(file.size)"></span>
+                                            <span class="ml-2" x-text="formatFileTime(file.modified_at)"></span>
+                                        </div>
+                                    </div>
+                                    <div class="flex gap-2 ml-2">
+                                        <button @click="downloadFile(file)"
+                                                class="btn-nav-sm text-xs"
+                                                :disabled="downloadingFile"
+                                                title="下载文件到本地">
+                                            下载
+                                        </button>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
                     </div>
                 </template>
 
