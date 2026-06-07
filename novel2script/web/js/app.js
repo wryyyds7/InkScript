@@ -2122,6 +2122,158 @@ function app() {
             }
         },
 
+        // ── 文件导入功能 ─────────────────────
+
+        /** 触发文件选择对话框 */
+        triggerFileImport() {
+            if (!this.activeProject) {
+                this.showToast('请先打开一个项目');
+                return;
+            }
+            const fileInput = document.getElementById('file-import-input');
+            if (fileInput) fileInput.click();
+        },
+
+        /** 处理文件导入 */
+        async importFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            // 验证文件类型
+            const allowedTypes = ['.txt', '.docx', '.pdf'];
+            const fileExt = '.' + file.name.split('.').pop().toLowerCase();
+            if (!allowedTypes.includes(fileExt)) {
+                alert(`不支持的文件类型：${fileExt}\n仅支持 ${allowedTypes.join(', ')}`);
+                event.target.value = '';
+                return;
+            }
+
+            // 验证文件大小（最大 50MB）
+            const maxSize = 50 * 1024 * 1024;
+            if (file.size > maxSize) {
+                alert(`文件太大：${(file.size / 1024 / 1024).toFixed(2)}MB\n最大支持 50MB`);
+                event.target.value = '';
+                return;
+            }
+
+            this.showToast(`正在导入文件：${file.name}...`);
+
+            try {
+                // 创建 FormData
+                const formData = new FormData();
+                formData.append('file', file);
+
+                // 调用后端 API
+                const response = await fetch(`/api/v1/projects/${this.activeProject.id}/import-file`, {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                const result = await response.json();
+
+                if (result.code === 0) {
+                    const { text, char_count } = result.data;
+
+                    // 问题5：检查字数限制（最小500字）
+                    if (char_count < 500) {
+                        alert(`文件内容太短（仅 ${char_count} 字），最少需要 500 字`);
+                        event.target.value = '';
+                        return;
+                    }
+
+                    // 问题4：简单过滤（移除多余空行和特殊字符）
+                    this.showToast('正在过滤内容...');
+                    const filteredText = text
+                        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // 移除控制字符
+                        .replace(/\n{3,}/g, '\n\n') // 合并多余空行
+                        .trim();
+
+                    // 问题5：如果内容超过最大限制，提示用户
+                    const MAX_CHARS = 50000; // 单次最大字符数
+                    let finalText = filteredText || text;
+
+                    if (finalText.length > MAX_CHARS) {
+                        if (!confirm(`内容较长（${finalText.length} 字），将超过单次处理限制。\n点击"确定"分批处理，点击"取消"仅加载前 ${MAX_CHARS} 字。`)) {
+                            finalText = finalText.substring(0, MAX_CHARS);
+                        }
+                    }
+
+                    // 写入编辑器
+                    if (this.novelEditor) {
+                        const { setContent } = await import('/js/editor.js');
+                        setContent(this.novelEditor, finalText);
+                    }
+
+                    // 自动保存
+                    await this.debounceSaveNovel();
+
+                    this.showToast(`导入成功！共 ${char_count} 字，过滤后为 ${finalText.length} 字`);
+                } else {
+                    alert('导入失败：' + result.message);
+                }
+            } catch (error) {
+                console.error('文件导入失败:', error);
+                alert('文件导入失败：' + error.message);
+            } finally {
+                // 清空文件输入，允许重复选择同一文件
+                event.target.value = '';
+            }
+        },
+
+        /** 防抖保存小说 */
+        debounceSaveNovel() {
+            clearTimeout(this._novelSaveTimer);
+            this._novelSaveTimer = setTimeout(() => {
+                if (this.activeProject) this.saveNovel();
+            }, 2000);
+        },
+
+        // ── 保存位置提示功能（问题6）─────────────────────
+
+        /** 显示保存位置信息 */
+        showSaveLocation(type = 'novel') {
+            const projectDir = `projects/${this.activeProject.id}`;
+            const filename = type === 'novel' ? 'novel.txt' : 'script.yaml';
+            const fullPath = `${projectDir}/${type}/${filename}`;
+            this.showToast(`已保存！文件位置：${fullPath}`);
+        },
+
+        /** 保存小说（重写以支持命名） */
+        async saveNovelWithNotice() {
+            if (!this.activeProject) return;
+            const content = this.novelEditor
+                ? (await import('/js/editor.js')).getContent(this.novelEditor)
+                : this.novelYaml;
+
+            // 让用户命名文件（可选）
+            const customName = prompt('请输入文件名（留空使用项目名称）:', this.activeProject.name || 'novel');
+            if (customName === null) return; // 用户取消
+
+            // 调用原有保存逻辑
+            await this.saveNovel();
+            
+            // 显示保存位置
+            this.showSaveLocation('novel');
+        },
+
+        /** 保存剧本（重写以支持命名） */
+        async saveScriptWithNotice() {
+            if (!this.activeProject) return;
+            const yaml = this.scriptEditor
+                ? (await import('/js/editor.js')).getContent(this.scriptEditor)
+                : this.scriptYaml;
+
+            // 让用户命名文件（可选）
+            const customName = prompt('请输入文件名（留空使用项目名称）:', this.activeProject.name || 'script');
+            if (customName === null) return; // 用户取消
+
+            // 调用原有保存逻辑
+            await this.saveScript();
+            
+            // 显示保存位置
+            this.showSaveLocation('script');
+        },
+
         /** 在页面卸载前保存元数据 */
         setupBeforeUnload() {
             window.addEventListener('beforeunload', () => {

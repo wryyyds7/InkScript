@@ -567,3 +567,87 @@ def update_edit_meta(
     store.save_edit_meta(project_id, current_meta)
     return {"code": 0, "message": "编辑器元数据已更新", "data": current_meta}
 
+
+# ── 文件导入 API ──────────────────────────────────
+
+@router.post("/{project_id}/import-file")
+async def import_file(
+    project_id: str,
+    file: UploadFile = File(...),
+    store: FileSystemProjectStore = Depends(get_store),
+):
+    """
+    导入文件（支持 .txt, .docx, .pdf）
+    
+    流程：
+    1. 接收上传的文件
+    2. 根据文件类型解析内容
+    3. 返回提取的文本内容
+    4. 前端将内容写入小说编辑器并自动保存
+    """
+    # 检查项目是否存在
+    if not store.get_project(project_id):
+        raise HTTPException(status_code=404, detail="项目不存在")
+    
+    # 检查文件类型
+    filename = file.filename or ""
+    file_ext = Path(filename).suffix.lower()
+    
+    if file_ext not in (".txt", ".docx", ".pdf"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的文件类型：{file_ext}，仅支持 .txt, .docx, .pdf"
+        )
+    
+    try:
+        # 读取文件内容
+        content = await file.read()
+        
+        # 根据文件类型解析
+        if file_ext == ".txt":
+            text = content.decode("utf-8", errors="ignore")
+            
+        elif file_ext == ".docx":
+            # 使用 python-docx 解析
+            from docx import Document
+            from io import BytesIO
+            
+            doc = Document(BytesIO(content))
+            paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+            text = "\n".join(paragraphs)
+            
+        elif file_ext == ".pdf":
+            # 使用 PyPDF2 解析
+            from PyPDF2 import PdfReader
+            from io import BytesIO
+            
+            reader = PdfReader(BytesIO(content))
+            pages = [page.extract_text() for page in reader.pages]
+            text = "\n".join(pages)
+            
+        else:
+            raise HTTPException(status_code=400, detail="不支持的文件类型")
+        
+        # 检查文本长度
+        if len(text) < 500:
+            raise HTTPException(
+                status_code=400,
+                detail=f"文件内容太短（仅 {len(text)} 字），最少需要 500 字"
+            )
+        
+        # 返回提取的文本
+        return {
+            "code": 0,
+            "data": {
+                "filename": filename,
+                "text": text,
+                "char_count": len(text),
+                "word_count": len([c for c in text if '\u4e00' <= c <= '\u9fff']) + len(text.split()),
+            }
+        }
+        
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="文件编码错误，请确保文件是 UTF-8 编码")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"文件解析失败：{str(e)}")
+
