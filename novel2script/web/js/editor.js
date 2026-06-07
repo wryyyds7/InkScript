@@ -119,18 +119,23 @@ export function initScriptEditor(container, content = "", opts = {}) {
             }),
 
             // ── 点击 Beat 滚动联动 ─────────
-            EditorView.domEventHandlers({
-                click: (event, view) => {
+            // 使用 ViewPlugin 在 DOM 上绑定事件
+            EditorView.viewPlugin.of((view) => {
+                const handler = (event) => {
                     const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
                     if (pos !== null) {
                         const line = view.state.doc.lineAt(pos);
-                        // 通过 CustomEvent 通知 app.js 处理滚动联动
                         window.dispatchEvent(new CustomEvent("script-click", {
                             detail: { line: line.number, pos },
                         }));
                     }
-                    return false;
-                },
+                };
+                view.dom.addEventListener("click", handler);
+                return {
+                    destroy() {
+                        view.dom.removeEventListener("click", handler);
+                    },
+                };
             }),
         ],
     });
