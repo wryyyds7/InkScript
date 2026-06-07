@@ -9,12 +9,12 @@ from __future__ import annotations
 import re
 from typing import Any, Dict
 
-from novel2script.core.steps.base import BaseStep, register_step
+from novel2script.core.steps.base import StepProtocol, register_step
 from novel2script.schema import Script
 
 
 @register_step("text_splitter")
-class TextSplitterStep(BaseStep):
+class TextSplitterStep:
     """长文本智能分段 Step
 
     功能:
@@ -42,25 +42,23 @@ class TextSplitterStep(BaseStep):
             ctx: 上下文字典
 
         Returns:
-            处理后的 Script(如果文本不长,直接返回原 Script)
+            处理后的 Script
         """
         # 1. 获取模型上下文长度
         max_context = self._get_model_context_length(llm)
 
-        # 2. 计算当前文本 token 数(粗略估算:1 个中文字符 ≈ 2 个 token)
-        estimated_tokens = len(novel_text) * 2
+        # 2. 安全阈值：每个 segment 建议最大字符数
+        #    保守估算：1 token ≈ 0.5 个中文字符
+        safe_chars_per_segment = int(max_context * 0.5 * 0.7)  # 保留 30% 余量给 prompt 和输出
 
-        # 3. 如果未超出限制,直接返回
-        if estimated_tokens <= max_context * 0.8:  # 保留 20% 余量
-            return script
+        # 3. 无论文本长短，都进行分段（保证后续 Step 能统一处理）
+        segments = self._split_text_by_chapters_and_length(novel_text, safe_chars_per_segment)
 
-        # 4. 超出限制,进行智能分段
-        segments = self._split_text(novel_text, max_context)
-
-        # 5. 将分段信息存入上下文(供后续 Step 使用)
+        # 4. 将分段信息存入上下文(供后续 Step 使用)
         if ctx is not None:
             ctx["text_segments"] = segments
-            ctx["is_long_text"] = True
+            ctx["is_long_text"] = len(segments) > 1
+            ctx["segment_threshold"] = safe_chars_per_segment
 
         return script
 
@@ -100,6 +98,151 @@ class TextSplitterStep(BaseStep):
             pass
 
         return default_context
+
+    def _split_text_by_chapters_and_length(
+        self, text: str, max_chars_per_segment: int
+    ) -> list[str]:
+        """智能分段文本：优先在章节边界分割，保证语义完整
+
+        策略：
+        1. 先按章节标题分割
+        2. 如果某章仍然超过 max_chars_per_segment，按段落进一步分割
+        3. 如果某段落还是超长，按句子分割（兜底）
+
+        Args:
+            text: 待分段文本
+            max_chars_per_segment: 每段最大字符数
+
+        Returns:
+            分段列表（保持语义完整性）
+        """
+        segments: list[str] = []
+
+        # ── 策略1：按章节标题分割 ──
+        chapter_patterns = [
+            r"第[一二三四五六七八九十百千\d]+章[^\n]*",
+            r"第[一二三四五六七八九十百千\d]+节[^\n]*",
+            r"Chapter\s+\d+[^\n]*",
+            r"第\d+章[^\n]*",
+            r"【[^】]+】",
+            r"#+\s+.+",  # Markdown 标题
+        ]
+
+        chapters: list[str] = [text]  # 默认整篇
+        for pattern in chapter_patterns:
+            parts = re.split(f"({pattern})", text)
+            if len(parts) >= 3:  # 至少匹配到1个标题
+                chapters = []
+                current = ""
+                for part in parts:
+                    if not part:
+                        continue
+                    if re.match(pattern, part):
+                        # 新章节开始
+                        if current:
+                            chapters.append(current)
+                        current = part
+                    else:
+                        current += part
+                if current:
+                    chapters.append(current)
+                break  # 使用第一个匹配到的模式
+
+        # ── 策略2：对每章，按 max_chars 再分割 ──
+        for chapter in chapters:
+            if len(chapter) <= max_chars_per_segment:
+                segments.append(chapter)
+            else:
+                # 按双换行分割段落
+                sub_segments = self._split_by_paragraphs(
+                    chapter, max_chars_per_segment
+                )
+                segments.extend(sub_segments)
+
+        return segments
+
+    def _split_by_paragraphs(
+        self, text: str, max_chars: int
+    ) -> list[str]:
+        """按段落分割文本，每段不超过 max_chars
+
+        Args:
+            text: 待分割文本
+            max_chars: 每段最大字符数
+
+        Returns:
+            段落分段列表
+        """
+        result: list[str] = []
+        paragraphs = text.split("\n\n")
+        current = ""
+
+        for para in paragraphs:
+            if not para.strip():
+                continue
+
+            # 如果当前段落本身超长，按句子分割
+            if len(para) > max_chars:
+                if current:
+                    result.append(current)
+                    current = ""
+                sub = self._split_by_sentences(para, max_chars)
+                result.extend(sub)
+                continue
+
+            if len(current) + len(para) + 2 > max_chars:
+                if current:
+                    result.append(current)
+                current = para
+            else:
+                current = current + "\n\n" + para if current else para
+
+        if current:
+            result.append(current)
+
+        return result
+
+    def _split_by_sentences(
+        self, text: str, max_chars: int
+    ) -> list[str]:
+        """按句子分割（兜底策略）
+
+        Args:
+            text: 待分割文本
+            max_chars: 每段最大字符数
+
+        Returns:
+            句子分段列表
+        """
+        result: list[str] = []
+        # 按句号、问号、感叹号、省略号分割
+        sentences = re.split(r"(?<=[。！？…\.!\?])", text)
+        current = ""
+
+        for sent in sentences:
+            if not sent.strip():
+                continue
+
+            # 单个句子超长，硬切
+            if len(sent) > max_chars:
+                if current:
+                    result.append(current)
+                    current = ""
+                for i in range(0, len(sent), max_chars):
+                    result.append(sent[i : i + max_chars])
+                continue
+
+            if len(current) + len(sent) > max_chars:
+                if current:
+                    result.append(current)
+                current = sent
+            else:
+                current += sent
+
+        if current:
+            result.append(current)
+
+        return result
 
     def _split_text(self, text: str, max_context: int) -> list[str]:
         """智能分段文本

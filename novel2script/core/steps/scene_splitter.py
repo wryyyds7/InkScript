@@ -137,14 +137,20 @@ class SceneSplitterStep:
         characters = ctx.get("characters", [])
         char_str = "、".join(characters) if characters else "(暂无)"
 
-        # 1. 尝试按章标题分割
-        chapters = _split_by_chapters(novel_text)
-        
+        # 1. 优先使用 text_splitter 的分段结果，否则按章节分割
+        text_segments = ctx.get("text_segments")
+        if text_segments and len(text_segments) > 1:
+            print(f"[scene_splitter] 使用 text_splitter 的 {len(text_segments)} 个分段")
+            chapters = [(f"分段{i+1}", seg) for i, seg in enumerate(text_segments)]
+        else:
+            chapters = _split_by_chapters(novel_text)
+            print(f"[scene_splitter] 按章节分割: {len(chapters)} 章")
+
         script.scenes = []
         scene_id = 1
 
         for chapter_title, chapter_content in chapters:
-            # 2. 如果章节内容过长，智能分割场景
+            # 2. 如果章节内容过长，进一步智能分割
             if len(chapter_content) > 5000:
                 scene_texts = _smart_split_scenes(chapter_content)
             else:
@@ -155,7 +161,7 @@ class SceneSplitterStep:
                     continue
 
                 prompt = _USER_PROMPT_TPL.format(
-                    segment_text=scene_text[:5000],  # 每段最多 5000 字
+                    segment_text=scene_text[:5000],  # 每段最多 5000 字给 LLM
                     characters=char_str,
                     start_id=scene_id,
                 )
@@ -189,4 +195,5 @@ class SceneSplitterStep:
                     )
                     scene_id += 1
 
+        print(f"[scene_splitter] 共分割出 {len(script.scenes)} 个场景")
         return script

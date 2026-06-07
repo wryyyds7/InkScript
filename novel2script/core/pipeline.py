@@ -138,6 +138,7 @@ def build_pipeline(
 
     if step_names is None:
         step_names = [
+            "text_splitter",          # 第一步：长文本智能分段
             "character_extractor",
             "scene_splitter",
             "dialogue_parser",
