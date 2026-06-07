@@ -93,7 +93,7 @@ export function initScriptEditor(container, content = "", opts = {}) {
             syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
             autocompletion(),
             yamlSchemaLinter,                  // YAML Schema 实时校验
-            indentUnit.reconfigure(Editor,State.tabSize.of(2)),
+            indentUnit.reconfigure(EditorState.tabSize.of(2)),
 
             keymap.of([...defaultKeymap, ...historyKeymap]),
 
@@ -101,7 +101,7 @@ export function initScriptEditor(container, content = "", opts = {}) {
             EditorView.lineWrapping,
 
             // YAML 缩进 2 空格
-            indentUnit.reconfigure(Editor,State.tabSize.of(2)),
+            indentUnit.reconfigure(EditorState.tabSize.of(2)),
 
             // 基础样式
             EditorView.theme({
