@@ -14,14 +14,17 @@ import { parseBeatsFromYaml } from "/js/scroll-sync.js";
  * @param {object} app - Alpine.js app 实例
  */
 export function initBeatBoard(app) {
+    console.log('[beat-board] 初始化...');
     if (!app || !app.scriptEditor) {
-        console.error('节拍板初始化失败：剧本编辑器未就绪');
+        console.error('[beat-board] 剧本编辑器未就绪');
         return;
     }
 
     // 解析 YAML 获取 Beat 数据
     const yamlText = getContent(app.scriptEditor);
+    console.log('[beat-board] YAML 长度:', yamlText?.length || 0);
     const beats = parseBeatsFromYaml(yamlText);
+    console.log('[beat-board] 解析到 Beat 数量:', beats.length);
 
     // 按场景分组
     const scenes = groupBeatsByScene(beats);
