@@ -1933,8 +1933,10 @@ function app() {
             this.viewMode = this.viewMode === 'yaml' ? 'beat-board' : 'yaml';
             
             if (this.viewMode === 'beat-board' && this.activeProject) {
-                // 切换到节拍板视图，初始化
-                this.initBeatBoard();
+                // 切换到节拍板视图，等 DOM 渲染后再初始化
+                this.$nextTick(() => {
+                    setTimeout(() => this.initBeatBoard(), 100);
+                });
             } else {
                 // 切换回 YAML 视图
                 this.beatBoardVisible = false;
