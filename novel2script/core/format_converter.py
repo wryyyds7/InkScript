@@ -15,10 +15,16 @@ import json as _json
 from novel2script.schema import Script, to_yaml, from_yaml
 
 
+def _get_title(script: Script) -> str:
+    """获取剧本标题"""
+    return getattr(script, 'title', None) or getattr(script.meta, 'title', None) or "未命名剧本"
+
+
 def script_to_txt(script: Script) -> str:
     """将 Script 转换为纯文本剧本格式"""
+    title = _get_title(script)
     lines = []
-    lines.append(f"{script.title}")
+    lines.append(title)
     lines.append("=" * 40)
     lines.append("")
 
@@ -70,6 +76,7 @@ def script_to_txt(script: Script) -> str:
 
 def script_to_html(script: Script) -> str:
     """将 Script 转换为 HTML 剧本页面"""
+    title = _get_title(script)
     lines = []
     lines.append("""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -94,7 +101,7 @@ h1 {{ text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; }
 </head>
 <body>
 <h1>{title}</h1>
-""".format(title=script.title))
+""".format(title=title))
 
     if script.characters:
         lines.append('<div class="character-list"><h3>角色列表</h3><ul>')
@@ -146,7 +153,7 @@ h1 {{ text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; }
 def script_to_fountain(script: Script) -> str:
     """将 Script 转换为 Fountain 剧本格式"""
     lines = []
-    lines.append(f"Title: {script.title}")
+    lines.append(f"Title: {_get_title(script)}")
     if script.author:
         lines.append(f"Author: {script.author}")
     lines.append("")
