@@ -913,10 +913,20 @@ function app() {
             this.scriptEditor = initScriptEditor(scriptContainer, this.scriptYaml || '', { readOnly: false });
 
             // 启用小说编辑器的右键菜单（预处理功能 P1-7）
-            this._initNovelContextMenu();
+            // 添加错误处理，避免因为右键菜单初始化失败导致整个编辑器无法使用
+            try {
+                this._initNovelContextMenu();
+            } catch (error) {
+                console.error('右键菜单初始化失败:', error);
+            }
 
             // 启用 Beat 内联编辑（P0-3）
-            this._initBeatEditing();
+            // 添加错误处理，避免因为 Beat 编辑功能失败导致整个编辑器无法使用
+            try {
+                this._initBeatEditing();
+            } catch (error) {
+                console.error('Beat 编辑功能初始化失败:', error);
+            }
 
             // 监听内容变更事件（来自 editor.js 的 CustomEvent）
             window.addEventListener('novel-change', (e) => {
