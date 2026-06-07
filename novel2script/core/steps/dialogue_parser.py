@@ -54,7 +54,7 @@ _USER_PROMPT_TPL = """## 角色列表
 """
 
 # 每个片段最大字符数（确保不会超出 LLM 上下文）
-MAX_CHARS_PER_CHUNK = 2000
+MAX_CHARS_PER_CHUNK = 6000
 
 
 @register_step("dialogue_parser")
