@@ -1472,12 +1472,20 @@ function app() {
             // 兼容传入对象或字符串
             const skillName = typeof skill === 'string' ? skill : skill.name || skill.id;
 
+            // 获取当前剧本 YAML 内容
+            let yamlContent = this.scriptYaml || '';
+            if (!yamlContent && this.scriptEditor) {
+                const { getContent } = await import('/js/editor.js');
+                yamlContent = getContent(this.scriptEditor);
+            }
+
             try {
                 const res = await fetch(`/api/v1/skills/${skillName}/run`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         project_id: this.activeProject.id,
+                        yaml_content: yamlContent,
                     }),
                 });
                 const data = await res.json();
