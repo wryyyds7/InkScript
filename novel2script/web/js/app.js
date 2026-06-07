@@ -759,6 +759,38 @@ function app() {
             }
         },
 
+        /** 运行指定 Skill */
+        async runSkill(skill) {
+            if (!this.activeProject) {
+                alert('请先打开一个项目');
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/v1/skills/${skill.id}/run`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        project_id: this.activeProject.id,
+                    }),
+                });
+                const data = await res.json();
+                if (data.code === 0) {
+                    this.showToast(`Skill "${skill.name}" 运行成功`);
+                    // 如果是 exporter 类型，触发下载
+                    if (data.data?.download_url) {
+                        window.open(data.data.download_url, '_blank');
+                    } else if (data.data?.result) {
+                        alert(`运行结果:\n\n${JSON.stringify(data.data.result, null, 2)}`);
+                    }
+                } else {
+                    alert('运行失败: ' + data.message);
+                }
+            } catch (e) {
+                alert('运行失败: ' + e.message);
+            }
+        },
+
         // ── 配置管理 ─────────────────────
         async loadConfig() {
             try {
@@ -1506,117 +1538,6 @@ function app() {
             a.download = `${this.activeProject?.name || 'script'}.${ext}`;
             a.click();
             URL.revokeObjectURL(url);
-        },
-
-        // ── Skills 管理 ─────────────────────
-
-        /** 加载 Skills 列表（内置 + 用户） */
-        async loadSkills() {
-            try {
-                const res = await fetch('/api/v1/skills');
-                const data = await res.json();
-                if (data.code === 0) {
-                    const allSkills = data.data || [];
-                    this.builtinSkills = allSkills.filter(s => !s.is_user);
-                    this.userSkills = allSkills.filter(s => s.is_user);
-                    this.skills = allSkills;
-                }
-            } catch (e) {
-                console.error('加载 Skills 失败:', e);
-            }
-        },
-
-        /** 切换 Skill 启用/禁用状态 */
-        async toggleSkill(name) {
-            try {
-                const res = await fetch(`/api/v1/skills/${name}/toggle`, {
-                    method: 'POST',
-                });
-                const data = await res.json();
-                if (data.code === 0) {
-                    this.showToast(`Skill "${name}" ${data.data.enabled ? '已启用' : '已禁用'}`);
-                    await this.loadSkills();
-                } else {
-                    alert('操作失败: ' + data.message);
-                }
-            } catch (e) {
-                alert('操作失败: ' + e.message);
-            }
-        },
-
-        /** 运行指定 Skill */
-        async runSkill(name) {
-            if (!this.activeProject) {
-                alert('请先打开一个项目');
-                return;
-            }
-
-            try {
-                const res = await fetch(`/api/v1/skills/${name}/run`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        project_id: this.activeProject.id,
-                    }),
-                });
-                const data = await res.json();
-                if (data.code === 0) {
-                    this.showToast(`Skill "${name}" 运行成功`);
-                    // 如果是 exporter 类型，触发下载
-                    if (data.data?.download_url) {
-                        window.open(data.data.download_url, '_blank');
-                    } else if (data.data?.result) {
-                        alert(`运行结果:\n\n${JSON.stringify(data.data.result, null, 2)}`);
-                    }
-                } else {
-                    alert('运行失败: ' + data.message);
-                }
-            } catch (e) {
-                alert('运行失败: ' + e.message);
-            }
-        },
-
-        /** 删除用户自定义 Skill */
-        async deleteSkill(name) {
-            if (!confirm(`确认删除 Skill "${name}"？删除后不可恢复。`)) return;
-            
-            try {
-                const res = await fetch(`/api/v1/skills/${name}`, {
-                    method: 'DELETE',
-                });
-                const data = await res.json();
-                if (data.code === 0) {
-                    this.showToast(`Skill "${name}" 已删除`);
-                    await this.loadSkills();
-                } else {
-                    alert('删除失败: ' + data.message);
-                }
-            } catch (e) {
-                alert('删除失败: ' + e.message);
-            }
-        },
-
-        /** 安装 Skill（从本地路径） */
-        async installSkill() {
-            const path = prompt('请输入 Skill 目录路径（含 metadata.json 或 SKILL.md）:');
-            if (!path) return;
-
-            try {
-                const res = await fetch('/api/v1/skills/install', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ path }),
-                });
-                const data = await res.json();
-                if (data.code === 0) {
-                    this.showToast(`Skill 安装成功！`);
-                    await this.loadSkills();
-                } else {
-                    alert('安装失败: ' + data.message);
-                }
-            } catch (e) {
-                alert('安装失败: ' + e.message);
-            }
         },
 
         // ── 配置快照功能 ─────────────────────
