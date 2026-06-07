@@ -114,9 +114,7 @@ async def _run_pipeline(task_id: str, project_id: str, store: FileSystemProjectS
 
     import os
 
-    from novel2script.core.pipeline import Pipeline
-
-    from novel2script.skills.loader import load_skill
+    from novel2script.core.pipeline import build_pipeline
 
     
 
@@ -138,53 +136,9 @@ async def _run_pipeline(task_id: str, project_id: str, store: FileSystemProjectS
 
         
 
-        # 创建 Pipeline 实例
+        # 创建 Pipeline 实例（使用默认 Step 列表）
 
-        pipeline = Pipeline()
-
-        
-
-        # 注册 Skill
-
-        skill_dirs = [
-
-            os.path.join(os.path.dirname(__file__), "../../skills/builtins"),
-
-            os.path.join(os.path.dirname(__file__), "../../skills/user"),
-
-        ]
-
-        
-
-        for skill_dir in skill_dirs:
-
-            if not os.path.exists(skill_dir):
-
-                continue
-
-            
-
-            for skill_name in os.listdir(skill_dir):
-
-                skill_path = os.path.join(skill_dir, skill_name)
-
-                if not os.path.isdir(skill_path):
-
-                    continue
-
-                
-
-                try:
-
-                    skill = load_skill(skill_path)
-
-                    if skill:
-
-                        pipeline.register_skill(skill_name, skill)
-
-                except Exception as e:
-
-                    print(f"加载 Skill {skill_name} 失败: {e}")
+        pipeline = build_pipeline(llm=None)
 
         
 
@@ -381,8 +335,6 @@ async def _run_pipeline(task_id: str, project_id: str, store: FileSystemProjectS
         pipeline.register_before_hook(_before_hook)
 
         pipeline.register_after_hook(_after_hook)
-
-        pipeline.register_error_hook(_error_hook)
 
         
 
