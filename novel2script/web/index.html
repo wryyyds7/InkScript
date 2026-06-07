@@ -8,14 +8,22 @@
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <!-- CodeMirror 主题 CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@codemirror/theme-one-dark@6.1.2/theme/one-dark.css" />
-    <!-- 使用 jsdelivr.net ?bundle 模式（单一 bundle 确保依赖唯一） -->
+    <!-- Import Map：告诉浏览器如何解析裸模块导入（使用 esm.sh CDN） -->
     <script type="importmap">
     {
         "imports": {
-            "@codemirror/lang-yaml": "https://cdn.jsdelivr.net/npm/@codemirror/lang-yaml@6.1.3/+esm?bundle",
-            "@codemirror/theme-one-dark": "https://cdn.jsdelivr.net/npm/@codemirror/theme-one-dark@6.1.2/+esm?bundle",
-            "@codemirror/lint": "https://cdn.jsdelivr.net/npm/@codemirror/lint@6.8.0/+esm?bundle",
-            "yaml": "https://cdn.jsdelivr.net/npm/yaml@2.3.4/+esm?bundle"
+            "@codemirror/state": "https://esm.sh/@codemirror/state@6.4.0",
+            "@codemirror/view": "https://esm.sh/@codemirror/view@6.33.0",
+            "@codemirror/language": "https://esm.sh/@codemirror/language@6.10.0",
+            "@codemirror/lint": "https://esm.sh/@codemirror/lint@6.8.0",
+            "@codemirror/commands": "https://esm.sh/@codemirror/commands@6.7.0",
+            "@codemirror/history": "https://esm.sh/@codemirror/history@6.3.0",
+            "@codemirror/fold": "https://esm.sh/@codemirror/fold@6.3.0",
+            "@codemirror/gutter": "https://esm.sh/@codemirror/gutter@6.3.0",
+            "@codemirror/autocomplete": "https://esm.sh/@codemirror/autocomplete@6.18.0",
+            "@codemirror/lang-yaml": "https://esm.sh/@codemirror/lang-yaml@6.1.3",
+            "@codemirror/theme-one-dark": "https://esm.sh/@codemirror/theme-one-dark@6.1.2",
+            "yaml": "https://esm.sh/yaml@2.3.4"
         }
     }
     </script>
