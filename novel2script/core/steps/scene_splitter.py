@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, dict
+from typing import Any, Dict
 
 from novel2script.core.steps.base import StepProtocol, register_step
 from novel2script.llm_client import LLMClientProtocol

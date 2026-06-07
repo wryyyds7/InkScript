@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, dict
+from typing import Any, Dict
 
 from novel2script.core.steps.base import BaseStep, register_step
 from novel2script.schema import Script
