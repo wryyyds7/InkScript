@@ -15,6 +15,7 @@ function app() {
         converting: false,         // 是否正在转换
         progress: 0,               // 转换进度 0-100
         currentStep: '',           // 当前转换步骤名称
+        enableSkillsInPipeline: false,  // 转换完成后自动运行 Skills
         taskId: '',                // 当前转换任务 ID
         eventSource: null,         // SSE 连接
         settingsTab: 'ai',         // 设置侧边栏当前选项
@@ -1213,6 +1214,11 @@ function app() {
                 this.parseCharactersFromScript();
                 if (window.refreshBeatBoard) window.refreshBeatBoard(this);
                 this.showToast('转换完成！');
+                // 如果启用了集成 Skills，自动运行
+                if (this.enableSkillsInPipeline) {
+                    this.runEnabledSkills();
+                }
+            });
             });
 
             this.eventSource.addEventListener('warning', (e) => {
@@ -1460,6 +1466,26 @@ function app() {
             } catch (e) {
                 alert('操作失败: ' + e.message);
             }
+        },
+
+        /** 自动运行所有已启用的 Skills */
+        async runEnabledSkills() {
+            await this.loadSkills();
+            const enabled = this.skills.filter(s => s.enabled);
+            if (enabled.length === 0) {
+                console.log('[Skills] 没有启用的 Skill，跳过');
+                return;
+            }
+            console.log(`[Skills] 自动运行 ${enabled.length} 个 Skill:`, enabled.map(s => s.name || s.id));
+            this.currentStep = '运行 Skills...';
+            for (const skill of enabled) {
+                try {
+                    await this.runSkill(skill);
+                } catch (e) {
+                    console.error(`[Skills] ${skill.name || skill.id} 运行失败:`, e);
+                }
+            }
+            this.showToast(`Skills 运行完成 (${enabled.length} 个)`);
         },
 
         /** 运行指定 Skill */
