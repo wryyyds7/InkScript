@@ -166,8 +166,8 @@ def get_config() -> AppConfig:
                         setattr(config, config_key, config_data[json_key])
                     except Exception:
                         pass
-            # 兼容前端保存的 "api_key" 字段名
-            if "api_key" in config_data and not config_data.get("llm_api_key"):
+            # 兼容前端保存的 "api_key" 字段名（明文）
+            if "api_key" in config_data:
                 config.llm_api_key = config_data["api_key"]
         except Exception as e:
             print(f"[WARN] 加载 config.json 失败: {e}")
