@@ -119,37 +119,33 @@ async def _run_pipeline(task_id: str, project_id: str, store: FileSystemProjectS
     
 
     try:
+        print(f"[转换] 任务 {task_id} 开始")
 
         # 更新任务状态
-
         _update_task_status(task_id, "running", "init", 0.0)
 
-        
-
         # 加载项目数据
-
         novel_text = store.load_novel(project_id)
-
+        print(f"[转换] 加载小说文本: {len(novel_text)} 字符")
         if not novel_text:
-
             raise ValueError("小说原文为空")
 
-        
-
         # 创建 LLM 客户端
-
         from novel2script.llm_client import OpenAIClient
         from novel2script.config import get_config
         cfg = get_config()
+        api_key = cfg.get_decrypted_api_key()
+        print(f"[转换] LLM 配置: base_url={cfg.llm_base_url}, model={cfg.llm_model_name}, api_key={'***' if api_key else '(空)'}")
         llm = OpenAIClient(
             base_url=cfg.llm_base_url,
-            api_key=cfg.get_decrypted_api_key(),
+            api_key=api_key,
             model_name=cfg.llm_model_name,
+            timeout=120,  # 增加到 120 秒
         )
 
         # 创建 Pipeline 实例（使用默认 Step 列表）
-
         pipeline = build_pipeline(llm=llm)
+        print(f"[转换] Pipeline 创建成功, 共 {len(pipeline.steps)} 个步骤: {[s.name for s in pipeline.steps]}")
 
         
 
@@ -364,14 +360,13 @@ async def _run_pipeline(task_id: str, project_id: str, store: FileSystemProjectS
         
 
         # 运行转换
-
+        print(f"[转换] 开始运行 Pipeline...")
         result_script = pipeline.run(script, novel_text)
-
-        
+        print(f"[转换] Pipeline 执行完成, scenes={len(result_script.scenes)}")
 
         # 保存结果
-
         store.save_script(project_id, result_script)
+        print(f"[转换] 结果已保存到项目 {project_id}")
 
         
 

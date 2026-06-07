@@ -46,8 +46,10 @@ class OpenAIClient:
         cfg = get_config()
         self.model_name = model_name or cfg.llm_model_name
         self.timeout = timeout or cfg.llm_request_timeout
+        self.base_url = base_url or cfg.llm_base_url
+        print(f"[LLM] 初始化: base_url={self.base_url}, model={self.model_name}, timeout={self.timeout}s")
         self._client = OpenAI(
-            base_url=base_url or cfg.llm_base_url,
+            base_url=self.base_url,
             api_key=api_key or cfg.llm_api_key or "sk-placeholder",
             timeout=self.timeout,
         )
@@ -64,12 +66,13 @@ class OpenAIClient:
         presence_penalty: float | None = None,
     ) -> str:
         cfg = get_config()
+        actual_timeout = timeout or self.timeout
         kwargs: dict[str, Any] = {
             "model": self.model_name,
             "messages": messages,
             "temperature": temperature if temperature is not None else cfg.llm_temperature,
             "max_tokens": max_tokens or cfg.llm_max_tokens,
-            "timeout": timeout or self.timeout,
+            "timeout": actual_timeout,
         }
         if response_format:
             kwargs["response_format"] = response_format
@@ -86,8 +89,10 @@ class OpenAIClient:
         elif cfg.llm_presence_penalty != 0.0:
             kwargs["presence_penalty"] = cfg.llm_presence_penalty
 
+        print(f"[LLM] 调用 {self.model_name} (timeout={actual_timeout}s, max_tokens={kwargs['max_tokens']})...")
         resp = self._client.chat.completions.create(**kwargs)
         content = resp.choices[0].message.content or ""
+        print(f"[LLM] 响应长度: {len(content)} 字符")
         return content
 
     def chat_json(

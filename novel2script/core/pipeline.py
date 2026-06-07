@@ -83,6 +83,7 @@ class Pipeline:
         current = script
 
         for step in self.steps:
+            print(f"[Pipeline] 执行步骤: {step.name}")
             # before hooks
             for hook in self._before_hooks:
                 hook(self, step.name, self.ctx)
@@ -95,7 +96,9 @@ class Pipeline:
                     llm=self.llm,
                     ctx=self.ctx,
                 )
+                print(f"[Pipeline] 步骤 {step.name} 完成")
             except Exception as exc:
+                print(f"[Pipeline] 步骤 {step.name} 失败: {exc}")
                 raise RuntimeError(
                     f"Step [{step.name}] 执行失败:{exc}"
                 ) from exc
