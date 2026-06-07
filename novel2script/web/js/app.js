@@ -580,15 +580,18 @@ function app() {
             if (!confirmed) return;
 
             try {
-                await this.apiCall(`/api/v1/projects/${id}`, {
+                console.log(`开始删除项目: ${id}`);
+                const result = await this.apiCall(`/api/v1/projects/${id}`, {
                     method: 'DELETE'
                 }, '删除项目失败');
+                console.log('删除成功:', result);
 
                 await this.loadProjects();
                 this.showToast('✅ 项目已移动到回收站');
             } catch (error) {
                 // 错误已经在 apiCall() 中处理了
                 console.error('删除项目失败:', error);
+                alert('删除项目失败: ' + error.message);
             }
         },
 
