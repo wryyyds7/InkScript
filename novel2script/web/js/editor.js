@@ -36,7 +36,7 @@ export function initNovelEditor(container, content = "", opts = {}) {
             bracketMatching(),
             foldGutter(),
             history(),
-            indentUnit.reconfigure(EditorState.tabSize.of(4)),
+            indentUnit.of("    "),              // 小说缩进 4 空格
 
             keymap.of([...defaultKeymap, ...historyKeymap]),
 
@@ -93,15 +93,12 @@ export function initScriptEditor(container, content = "", opts = {}) {
             syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
             autocompletion(),
             yamlSchemaLinter,                  // YAML Schema 实时校验
-            indentUnit.reconfigure(EditorState.tabSize.of(2)),
+            indentUnit.of("  "),               // YAML 缩进 2 空格
 
             keymap.of([...defaultKeymap, ...historyKeymap]),
 
             EditorView.editable.of(!readOnly),
             EditorView.lineWrapping,
-
-            // YAML 缩进 2 空格
-            indentUnit.reconfigure(EditorState.tabSize.of(2)),
 
             // 基础样式
             EditorView.theme({
