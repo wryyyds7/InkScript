@@ -2,7 +2,7 @@
   "name": "dialogue-polish",
   "description": "润色剧本对白，使其更自然、更符合角色性格",
   "priority": 2,
-  "enabled": true,
+  "enabled": false,
   "version": "1.0.0",
   "author": "InkScript Team",
   "created_at": "2026-06-06T00:00:00Z"

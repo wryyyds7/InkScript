@@ -1,0 +1,10 @@
+{
+  "name": "character-profile",
+  "type": "analyzer",
+  "description": "生成角色人物小传（性格分析、人物弧光、角色关系）",
+  "version": "1.0.0",
+  "author": "InkScript Team",
+  "priority": 18,
+  "enabled": false,
+  "_source": "SKILL.md"
+}

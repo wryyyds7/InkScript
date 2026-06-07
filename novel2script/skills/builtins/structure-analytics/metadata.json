@@ -1,0 +1,10 @@
+{
+  "name": "structure-analytics",
+  "type": "analyzer",
+  "description": "剧本结构分析（幕次均衡、节奏分析、角色戏份分析）",
+  "version": "1.0.0",
+  "author": "InkScript Team",
+  "priority": 15,
+  "enabled": false,
+  "_source": "SKILL.md"
+}
