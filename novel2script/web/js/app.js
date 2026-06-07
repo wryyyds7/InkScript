@@ -1825,12 +1825,20 @@ function app() {
 
         /** 从剧本YAML中解析角色列表 */
         async parseCharactersFromScript() {
-            if (!this.scriptYaml) return;
+            if (!this.scriptYaml) {
+                console.log('[parseCharacters] scriptYaml 为空，尝试从编辑器获取');
+                if (this.scriptEditor) {
+                    const { getContent } = await import('/js/editor.js');
+                    this.scriptYaml = getContent(this.scriptEditor);
+                }
+                if (!this.scriptYaml) return;
+            }
             
             try {
                 // 用 parseBeatsFromYaml 解析所有 Beat，提取角色和情绪
                 const { parseBeatsFromYaml } = await import('/js/scroll-sync.js');
                 const beats = parseBeatsFromYaml(this.scriptYaml);
+                console.log('[parseCharacters] 解析到', beats.length, '条 beat');
                 const characterMap = {};
                 
                 for (const beat of beats) {
