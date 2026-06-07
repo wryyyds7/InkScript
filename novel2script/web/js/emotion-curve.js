@@ -62,7 +62,12 @@ export function initEmotionCurveChart(app) {
 
     // 创建新图表
     const ctx = canvas.getContext('2d');
-    emotionChart = new Chart(ctx, {
+    if (!ctx) {
+        console.error('无法获取 canvas 2d context');
+        return;
+    }
+    try {
+        emotionChart = new Chart(ctx, {
         type: 'line',
         data: {
             labels: chartData.labels,
@@ -129,6 +134,10 @@ export function initEmotionCurveChart(app) {
             }
         }
     });
+    } catch (e) {
+        console.warn('情绪曲线图表初始化失败（非关键错误）:', e.message);
+        return;
+    }
 
     // 保存图表实例到 app
     app.emotionCurveChart = emotionChart;
