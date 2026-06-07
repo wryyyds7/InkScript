@@ -4,7 +4,7 @@
  */
 
 import { EditorState, StateEffect } from "@codemirror/state";
-import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection } from "@codemirror/view";
+import { EditorView, ViewPlugin, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { indentOnInput, syntaxHighlighting, defaultHighlightStyle, bracketMatching, foldGutter, indentUnit } from "@codemirror/language";
 import { oneDark } from "@codemirror/theme-one-dark";
@@ -119,23 +119,23 @@ export function initScriptEditor(container, content = "", opts = {}) {
             }),
 
             // ── 点击 Beat 滚动联动 ─────────
-            // 使用 ViewPlugin 在 DOM 上绑定事件
-            EditorView.viewPlugin.of((view) => {
-                const handler = (event) => {
-                    const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
-                    if (pos !== null) {
-                        const line = view.state.doc.lineAt(pos);
-                        window.dispatchEvent(new CustomEvent("script-click", {
-                            detail: { line: line.number, pos },
-                        }));
-                    }
-                };
-                view.dom.addEventListener("click", handler);
-                return {
-                    destroy() {
-                        view.dom.removeEventListener("click", handler);
-                    },
-                };
+            ViewPlugin.fromClass(class {
+                constructor(view) {
+                    this.view = view;
+                    this.handler = (event) => {
+                        const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+                        if (pos !== null) {
+                            const line = view.state.doc.lineAt(pos);
+                            window.dispatchEvent(new CustomEvent("script-click", {
+                                detail: { line: line.number, pos },
+                            }));
+                        }
+                    };
+                    view.dom.addEventListener("click", this.handler);
+                }
+                destroy() {
+                    this.view.dom.removeEventListener("click", this.handler);
+                }
             }),
         ],
     });
