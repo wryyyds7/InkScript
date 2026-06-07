@@ -1428,11 +1428,15 @@ function app() {
             try {
                 const res = await fetch('/api/v1/skills');
                 const data = await res.json();
+                console.log('[loadSkills] API 返回:', data);
                 if (data.code === 0) {
-                    const allSkills = data.data || [];
-                    this.builtinSkills = allSkills.filter(s => !s.is_user);
-                    this.userSkills = allSkills.filter(s => s.is_user);
-                    this.skills = allSkills;
+                    // 后端返回 {builtin:[], user:[]} 格式
+                    const builtin = (data.data?.builtin || []).map(s => ({...s, is_user: false}));
+                    const user = (data.data?.user || []).map(s => ({...s, is_user: true}));
+                    this.builtinSkills = builtin;
+                    this.userSkills = user;
+                    this.skills = [...builtin, ...user];
+                    console.log('[loadSkills] 内置:', builtin.length, '用户:', user.length);
                 }
             } catch (e) {
                 console.error('加载 Skills 失败:', e);
