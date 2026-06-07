@@ -1451,9 +1451,12 @@ function app() {
         /** 切换 Skill 启用/禁用状态 */
         async toggleSkill(skill) {
             const skillName = typeof skill === 'string' ? skill : skill.name || skill.id;
+            const enabled = typeof skill === 'object' ? !skill.enabled : true;
             try {
-                const res = await fetch(`/api/v1/skills/${skillName}/toggle`, {
+                const res = await fetch(`/api/v1/skills/${skillName}/enable`, {
                     method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled }),
                 });
                 const data = await res.json();
                 if (data.code === 0) {

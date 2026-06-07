@@ -1,0 +1,10 @@
+{
+  "name": "casting-suggester",
+  "type": "analyzer",
+  "description": "根据角色特征推荐演员（匹配度评分）",
+  "version": "1.0.0",
+  "author": "InkScript Team",
+  "priority": 17,
+  "enabled": false,
+  "_source": "SKILL.md"
+}
