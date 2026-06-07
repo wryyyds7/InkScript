@@ -15,53 +15,22 @@ from novel2script.schema import BeatType, DialogueBeat, Script, SourceLocation
 
 
 
-_SYSTEM_PROMPT = """你是一个专业的剧本解析师，需要将小说文本转换为结构化剧本。
-你需要识别所有对白、动作描述、情绪变化，并标注镜头指示。
+_SYSTEM_PROMPT = """你是一个专业的剧本解析师，将小说文本转换为结构化剧本。
 
-## 输出格式
-输出一个 JSON 数组，每个元素是剧本中的一个 beat（节拍）。
+输出 JSON 数组，每个元素是一个 beat：
+- type: "dialogue"(对白) / "action"(动作描述) / "narration"(旁白)
+- dialogue 类型: character(说话人), content(内容), emotion(情绪), source_start, source_end
+- action 类型: content(含镜头指示如中景/近景/特写/闪回)
+- narration 类型: content(内心独白)
 
-## Beat 类型
-- "dialogue": 角色对白（包含说话人、内容、情绪）
-- "action": 动作/场景描述（包含镜头指示和动作内容）
-- "narration": 旁白/内心独白
+情绪选项: happy/sad/angry/calm/excited/fear/surprised/confident/firm/cold/curious/mock/embarrassed
 
-## 镜头指示（放在 action beat 的 content 中）
-- 远景/中景/近景/特写/大特写
-- 固定机位/缓慢推进/微仰角
-- 叠化转场/闪回/淡出
-- 冷色调/暖色调
+示例:
+输入: "荻原明靠在吊椅上，悠闲地翘着腿。荻原明：（微笑）怎么，决定好了吗。诗羽咬了咬牙。"
+输出: [{{"type":"action","content":"（中景）荻原明靠在吊椅上，悠闲地翘着腿。"}},{{"type":"dialogue","character":"荻原明","content":"怎么，决定好了吗。","emotion":"calm","source_start":1,"source_end":1}},{{"type":"action","content":"（特写）诗羽咬了咬牙。"}}]
 
-## 情绪标注
-从以下选择：happy/sad/angry/calm/excited/fear/surprised/confident/firm/cold/curious/mock/embarrassed
-
-## 示例
-输入文本：
-```
-荻原明靠在吊椅上，悠闲地翘着腿，温和帅气的脸上挂着浅笑。
-荻原明：（微笑）怎么，决定好了吗，霞之丘小姐。
-诗羽暗暗咬了咬牙，手指不自觉抓紧腿部内侧。
-霞之丘诗羽：（低头，诚恳）抱歉，荻原先生，我反悔了。
-```
-
-输出：
-```json
-[
-  {{"type": "action", "content": "（中景）荻原明靠在吊椅上，悠闲地翘着腿，手在藤椅扶手边缘轻敲，温和帅气的脸上挂着浅笑。"}},
-  {{"type": "dialogue", "character": "荻原明", "content": "怎么，决定好了吗，霞之丘小姐。", "emotion": "calm", "source_start": 1, "source_end": 1}},
-  {{"type": "action", "content": "（特写·手部）诗羽暗暗咬了咬牙，手指不自觉抓紧腿部内侧，指节发白。"}},
-  {{"type": "dialogue", "character": "霞之丘诗羽", "content": "抱歉，荻原先生，我反悔了。", "emotion": "embarrassed", "source_start": 3, "source_end": 3}}
-]
-```
-
-## 规则
-1. 每个对话前后如有动作描述，单独提取为 action beat
-2. 情绪从角色的动作和上下文推断，不要全部标 calm
-3. 动作描述要包含原文中的细节（身体动作、表情变化等）
-4. 中文引号「」"" 内通常为对白
-5. source_start/source_end 标注对白在段落列表中的索引（从0开始）
-
-只输出 JSON，不要输出其他内容。
+规则: 对话前后动作单独提取，情绪从上下文推断不全部标 calm，中文引号内为对白。
+只输出 JSON。
 """
 
 _USER_PROMPT_TPL = """## 角色列表
@@ -85,7 +54,7 @@ _USER_PROMPT_TPL = """## 角色列表
 """
 
 # 每个片段最大字符数（确保不会超出 LLM 上下文）
-MAX_CHARS_PER_CHUNK = 8000
+MAX_CHARS_PER_CHUNK = 2000
 
 
 @register_step("dialogue_parser")

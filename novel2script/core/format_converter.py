@@ -154,8 +154,9 @@ def script_to_fountain(script: Script) -> str:
     """将 Script 转换为 Fountain 剧本格式"""
     lines = []
     lines.append(f"Title: {_get_title(script)}")
-    if script.author:
-        lines.append(f"Author: {script.author}")
+    author = getattr(script, 'author', None) or getattr(script.meta, 'author', None)
+    if author:
+        lines.append(f"Author: {author}")
     lines.append("")
 
     for scene in script.scenes:
