@@ -1798,12 +1798,14 @@ function app() {
         async toggleEmotionCurve() {
             this.showEmotionCurve = !this.showEmotionCurve;
             if (this.showEmotionCurve && this.activeProject) {
-                // 延迟初始化图表，等待 DOM 更新
-                setTimeout(() => {
-                    if (window.initEmotionCurveChart) {
-                        window.initEmotionCurveChart(this);
-                    }
-                }, 100);
+                // 等待 DOM 渲染后再初始化图表
+                this.$nextTick(() => {
+                    setTimeout(() => {
+                        if (window.initEmotionCurveChart) {
+                            window.initEmotionCurveChart(this);
+                        }
+                    }, 300);
+                });
             }
         },
 
@@ -1850,13 +1852,12 @@ function app() {
         async toggleCharacterPanel() {
             this.showCharacterPanel = !this.showCharacterPanel;
             if (this.showCharacterPanel && this.activeProject) {
-                await this.loadCharacters();
-                // 延迟初始化雷达图，等待 DOM 更新
-                setTimeout(() => {
-                    if (this.selectedCharacter) {
-                        this.initCharacterRadarChart();
-                    }
-                }, 100);
+                // 等待 DOM 渲染后再加载
+                this.$nextTick(() => {
+                    setTimeout(async () => {
+                        await this.loadCharacters();
+                    }, 300);
+                });
             }
         },
 
@@ -1990,13 +1991,15 @@ function app() {
             
             const canvas = document.getElementById('characterRadarChart');
             if (!canvas || canvas.offsetWidth === 0 || canvas.offsetHeight === 0) {
-                console.warn('雷达图 canvas 未就绪，稍后重试');
-                setTimeout(() => this.initCharacterRadarChart(), 200);
+                requestAnimationFrame(() => this.initCharacterRadarChart());
                 return;
             }
             
             const ctx = canvas.getContext('2d');
-            if (!ctx) return;
+            if (!ctx) {
+                console.warn('Canvas context 不可用，跳过雷达图');
+                return;
+            }
             
             // 销毁之前的图表
             if (this.characterRadarChart) {
