@@ -1177,15 +1177,29 @@ function app() {
 
         async loadNovel() {
             if (!this.activeProject) return;
-            const res = await fetch(`/api/v1/projects/${this.activeProject.id}/novel`);
-            const data = await res.json();
-            const content = data.data?.content || '';
-            this.novelText = content;
-            this.novelWordCount = this.countWords(content);
-            // 如果编辑器已初始化，同步内容
-            if (this.novelEditor) {
-                const { setContent } = await import('/js/editor.js');
-                setContent(this.novelEditor, content);
+            try {
+                const res = await fetch(`/api/v1/projects/${this.activeProject.id}/novel`);
+                
+                // 检查响应状态
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}`);
+                }
+                
+                const data = await res.json();
+                const content = data.data?.content || '';
+                this.novelText = content;
+                this.novelWordCount = this.countWords(content);
+                // 如果编辑器已初始化，同步内容
+                if (this.novelEditor) {
+                    const { setContent } = await import('/js/editor.js');
+                    setContent(this.novelEditor, content);
+                }
+            } catch (error) {
+                console.error('加载小说失败:', error);
+                // 不抛出错误，使用空内容
+                this.novelText = '';
+                this.novelWordCount = 0;
+                this.showToast('⚠️ 加载小说失败，将使用空内容');
             }
         },
 
@@ -1294,14 +1308,32 @@ function app() {
 
         async loadScript() {
             if (!this.activeProject) return;
-            const res = await fetch(`/api/v1/projects/${this.activeProject.id}/script`);
-            const data = await res.json();
-            const yaml = data.data?.yaml || '';
-            this.scriptYaml = yaml;
-            // 同步到 CM6 编辑器
-            if (this.scriptEditor) {
-                const { setContent } = await import('/js/editor.js');
-                setContent(this.scriptEditor, yaml);
+            try {
+                const res = await fetch(`/api/v1/projects/${this.activeProject.id}/script`);
+                
+                // 检查响应状态
+                if (!res.ok) {
+                    if (res.status === 404) {
+                        // 剧本不存在，这是正常情况（新项目还没有剧本）
+                        console.log('剧本不存在，将使用空内容');
+                        this.scriptYaml = '';
+                        return;
+                    }
+                    throw new Error(`HTTP ${res.status}`);
+                }
+                
+                const data = await res.json();
+                const yaml = data.data?.yaml || '';
+                this.scriptYaml = yaml;
+                // 同步到 CM6 编辑器
+                if (this.scriptEditor) {
+                    const { setContent } = await import('/js/editor.js');
+                    setContent(this.scriptEditor, yaml);
+                }
+            } catch (error) {
+                console.error('加载剧本失败:', error);
+                // 不抛出错误，让调用者决定如何处理
+                this.scriptYaml = '';
             }
         },
 
