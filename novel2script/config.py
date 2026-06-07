@@ -137,18 +137,39 @@ class AppConfig(BaseSettings):
 @lru_cache(maxsize=1)
 # 获取单例配置(带缓存)
 def get_config() -> AppConfig:
-    """获取单例配置(带缓存)"""
-    # 从配置文件加载加密的 API Key
+    """获取单例配置(带缓存)，优先从 config.json 加载已保存的配置"""
+    config = AppConfig()
+
+    # 从 config.json 加载之前前端保存的配置
     config_file = Path.home() / ".novel2script" / "config.json"
     if config_file.exists():
-        config_data = json.loads(config_file.read_text(encoding="utf-8"))
-        if "llm_api_key" in config_data:
-            # 临时创建配置对象，然后设置加密的 API Key
-            config = AppConfig()
-            config.llm_api_key = config_data["llm_api_key"]
-            return config
-    
-    return AppConfig()
+        try:
+            config_data = json.loads(config_file.read_text(encoding="utf-8"))
+            # 将 config.json 中保存的字段映射到 AppConfig
+            field_mapping = {
+                "provider": "llm_provider",
+                "base_url": "llm_base_url",
+                "model_name": "llm_model_name",
+                "temperature": "llm_temperature",
+                "top_p": "llm_top_p",
+                "max_tokens": "llm_max_tokens",
+                "frequency_penalty": "llm_frequency_penalty",
+                "presence_penalty": "llm_presence_penalty",
+                "timeout": "llm_request_timeout",
+                "max_retries": "llm_max_retries",
+                "request_interval": "llm_request_interval",
+                "llm_api_key": "llm_api_key",
+            }
+            for json_key, config_key in field_mapping.items():
+                if json_key in config_data:
+                    try:
+                        setattr(config, config_key, config_data[json_key])
+                    except Exception:
+                        pass
+        except Exception as e:
+            print(f"[WARN] 加载 config.json 失败: {e}")
+
+    return config
 
 
 def reload_config() -> AppConfig:
