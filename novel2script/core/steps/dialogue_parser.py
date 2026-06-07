@@ -80,7 +80,9 @@ class DialogueParserStep:
         llm: LLMClientProtocol,
         ctx: dict,
     ) -> Script:
+        print(f"[dialogue_parser] script.characters: {len(script.characters)}, scenes: {len(script.scenes)}")
         characters = ctx.get("characters", [c.name for c in script.characters])
+        print(f"[dialogue_parser] characters: {characters}")
         char_str = "、".join(characters) if characters else "(暂无)"
 
         # 预分段，用于计算全局段落索引
