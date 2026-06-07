@@ -1312,6 +1312,11 @@ function app() {
                 this.currentStep = '完成';
                 this.eventSource.close();
                 this.loadScript();
+                // 延迟刷新角色和情绪数据
+                setTimeout(() => {
+                    this.parseCharactersFromScript();
+                    if (window.refreshBeatBoard) window.refreshBeatBoard(this);
+                }, 800);
                 this.showToast('转换完成！');
             });
 
@@ -1919,21 +1924,8 @@ function app() {
         async loadCharacters() {
             if (!this.activeProject) return;
             
-            try {
-                const res = await fetch(`/api/v1/projects/${this.activeProject.id}/characters`);
-                const data = await res.json();
-                if (data.code === 0) {
-                    this.characters = data.data || [];
-                    // 如果有角色且未选中，默认选中第一个
-                    if (this.characters.length > 0 && !this.selectedCharacter) {
-                        this.selectCharacter(this.characters[0]);
-                    }
-                }
-            } catch (e) {
-                console.error('加载角色列表失败:', e);
-                // 如果后端API不存在，从剧本YAML中解析角色
-                this.parseCharactersFromScript();
-            }
+            // 直接从 YAML 解析角色（更可靠）
+            await this.parseCharactersFromScript();
         },
 
         /** 从剧本YAML中解析角色列表 */
