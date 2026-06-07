@@ -8,22 +8,14 @@
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <!-- CodeMirror 主题 CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@codemirror/theme-one-dark@6.1.2/theme/one-dark.css" />
-    <!-- 使用 unpkg.com CDN（返回原始 ESM，不重复打包依赖） -->
+    <!-- 使用 jsdelivr.net CDN（/+esm 自动解析依赖） -->
     <script type="importmap">
     {
         "imports": {
-            "@codemirror/state": "https://unpkg.com/@codemirror/state@6.4.0/dist/index.js",
-            "@codemirror/view": "https://unpkg.com/@codemirror/view@6.33.0/dist/index.js",
-            "@codemirror/language": "https://unpkg.com/@codemirror/language@6.10.0/dist/index.js",
-            "@codemirror/lint": "https://unpkg.com/@codemirror/lint@6.8.0/dist/index.js",
-            "@codemirror/commands": "https://unpkg.com/@codemirror/commands@6.7.0/dist/index.js",
-            "@codemirror/history": "https://unpkg.com/@codemirror/history@6.3.0/dist/index.js",
-            "@codemirror/fold": "https://unpkg.com/@codemirror/fold@6.3.0/dist/index.js",
-            "@codemirror/gutter": "https://unpkg.com/@codemirror/gutter@6.3.0/dist/index.js",
-            "@codemirror/autocomplete": "https://unpkg.com/@codemirror/autocomplete@6.18.0/dist/index.js",
-            "@codemirror/lang-yaml": "https://unpkg.com/@codemirror/lang-yaml@6.1.3/dist/index.js",
-            "@codemirror/theme-one-dark": "https://unpkg.com/@codemirror/theme-one-dark@6.1.2/dist/index.js",
-            "yaml": "https://unpkg.com/yaml@2.3.4/dist/index.js"
+            "@codemirror/lang-yaml": "https://cdn.jsdelivr.net/npm/@codemirror/lang-yaml@6.1.3/+esm",
+            "@codemirror/theme-one-dark": "https://cdn.jsdelivr.net/npm/@codemirror/theme-one-dark@6.1.2/+esm",
+            "@codemirror/lint": "https://cdn.jsdelivr.net/npm/@codemirror/lint@6.8.0/+esm",
+            "yaml": "https://cdn.jsdelivr.net/npm/yaml@2.3.4/+esm"
         }
     }
     </script>
