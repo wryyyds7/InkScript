@@ -605,7 +605,7 @@ function app() {
 
         async loadTrash() {
             try {
-                const res = await fetch('/api/v1/trash');
+                const res = await fetch('/api/v1/projects/trash');
                 const data = await res.json();
                 if (data.code === 0) {
                     this.trashItems = data.data || [];
@@ -624,7 +624,7 @@ function app() {
             if (!confirmed) return;
             
             try {
-                await this.apiCall(`/api/v1/trash/${projectId}/restore`, {
+                await this.apiCall(`/api/v1/projects/trash/${projectId}/restore`, {
                     method: 'POST'
                 }, '恢复项目失败');
                 
@@ -645,7 +645,7 @@ function app() {
             if (!confirmed) return;
             
             try {
-                await this.apiCall(`/api/v1/trash/${projectId}`, {
+                await this.apiCall(`/api/v1/projects/trash/${projectId}`, {
                     method: 'DELETE'
                 }, '永久删除项目失败');
                 
