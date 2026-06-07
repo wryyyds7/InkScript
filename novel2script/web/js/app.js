@@ -1450,17 +1450,18 @@ function app() {
 
         /** 切换 Skill 启用/禁用状态 */
         async toggleSkill(skill) {
-            const skillName = typeof skill === 'string' ? skill : skill.name || skill.id;
-            const enabled = typeof skill === 'object' ? !skill.enabled : true;
+            const skillName = typeof skill === 'string' ? skill : (skill.name || skill.id);
+            const currentEnabled = (typeof skill === 'object' ? skill.enabled : true) !== false;
+            const newEnabled = !currentEnabled;
             try {
                 const res = await fetch(`/api/v1/skills/${skillName}/enable`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ enabled }),
+                    body: JSON.stringify({ enabled: newEnabled }),
                 });
                 const data = await res.json();
                 if (data.code === 0) {
-                    this.showToast(`Skill "${skillName}" ${data.data.enabled ? '已启用' : '已禁用'}`);
+                    this.showToast(`Skill "${skillName}" ${newEnabled ? '已启用' : '已禁用'}`);
                     await this.loadSkills();
                 } else {
                     alert('操作失败: ' + data.message);
