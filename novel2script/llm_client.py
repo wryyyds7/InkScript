@@ -134,10 +134,14 @@ class OpenAIClient:
 
         # 尝试提取 JSON(防止 LLM 返回 markdown 代码块)
         text = raw.strip()
-        print(f"[LLM] 原始响应: {text[:200]}")
+        print(f"[LLM] 原始响应: {text[:500]}")
         if text.startswith("```"):
             text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
-        result = json.loads(text)
+        try:
+            result = json.loads(text)
+        except json.JSONDecodeError as e:
+            print(f"[LLM] JSON 解析失败! 原始内容: {text[:1000]}")
+            raise
         print(f"[LLM] JSON 解析成功, 类型: {type(result).__name__}")
         return result
 
