@@ -58,6 +58,22 @@ class SSEManager:
         """注销客户端"""
         self.clients.pop(client_id, None)
 
+    async def subscribe(self, task_id: str) -> AsyncGenerator[str, None]:
+        """订阅任务事件流(SSE 生成器)"""
+        import uuid
+        client_id = f"{task_id}_{uuid.uuid4().hex[:8]}"
+        queue = await self.register_client(client_id, task_id)
+        try:
+            while True:
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=15.0)
+                    yield f"event: {event['event']}\ndata: {event['data']}\n\n"
+                except asyncio.TimeoutError:
+                    # 心跳
+                    yield ": ping\n\n"
+        finally:
+            await self.unregister_client(client_id)
+
 
 # 全局单例
 sse_manager = SSEManager()

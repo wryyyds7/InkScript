@@ -136,9 +136,20 @@ async def _run_pipeline(task_id: str, project_id: str, store: FileSystemProjectS
 
         
 
+        # 创建 LLM 客户端
+
+        from novel2script.llm_client import OpenAIClient
+        from novel2script.config import get_config
+        cfg = get_config()
+        llm = OpenAIClient(
+            base_url=cfg.llm_base_url,
+            api_key=cfg.get_decrypted_api_key(),
+            model_name=cfg.llm_model_name,
+        )
+
         # 创建 Pipeline 实例（使用默认 Step 列表）
 
-        pipeline = build_pipeline(llm=None)
+        pipeline = build_pipeline(llm=llm)
 
         
 
