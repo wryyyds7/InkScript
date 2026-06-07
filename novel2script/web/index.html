@@ -32,8 +32,12 @@
     <link rel="stylesheet" href="/css/app.css" />
     <!-- Chart.js CDN（情绪曲线可视化） -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <!-- SortableJS CDN（节拍板拖拽排序） -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <!-- 情绪曲线可视化模块 -->
     <script type="module" src="/js/emotion-curve.js"></script>
+    <!-- Beat 可视化编辑模块 -->
+    <script type="module" src="/js/beat-board.js"></script>
     <style>
         /* Beat 编辑器弹出层样式 */
         .beat-editor-popup {
@@ -496,6 +500,12 @@
                             </svg>
                             角色
                         </button>
+                        <button @click="toggleViewMode()" :class="viewMode === 'beat-board' ? 'btn-active' : 'btn-secondary'" aria-label="切换节拍板视图">
+                            <svg class="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/>
+                            </svg>
+                            节拍板
+                        </button>
                     </div>
                 </div>
                 
@@ -931,6 +941,55 @@
                                 请选择一个角色查看情绪分布
                             </div>
                         </template>
+                    </div>
+                </template>
+
+                <!-- Beat 可视化编辑（节拍板） -->
+                <template x-if="viewMode === 'beat-board'">
+                    <div class="mt-4 bg-white rounded-xl shadow-sm p-6 animate-fade-in">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-bold text-gray-900">🎬 节拍板</h3>
+                            <div class="flex items-center gap-3">
+                                <span class="text-xs text-gray-500">拖拽卡片可调整顺序</span>
+                                <button @click="toggleViewMode()" class="text-gray-400 hover:text-gray-600">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 图例 -->
+                        <div class="flex flex-wrap gap-3 mb-4 text-xs text-gray-600">
+                            <div class="flex items-center gap-1">
+                                <div class="w-3 h-3 bg-blue-500 rounded-full"></div>
+                                <span>对白</span>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <div class="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                                <span>动作</span>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <div class="w-3 h-3 bg-green-500 rounded-full"></div>
+                                <span>旁白</span>
+                            </div>
+                        </div>
+
+                        <!-- 节拍板容器 -->
+                        <div id="beat-board-container" class="max-h-screen overflow-y-auto">
+                            <!-- 动态渲染：场景 + Beat 卡片 -->
+                        </div>
+
+                        <!-- 操作提示 -->
+                        <div class="mt-4 p-3 bg-blue-50 rounded-lg text-xs text-blue-700">
+                            💡 提示：
+                            <ul class="mt-1 ml-4 list-disc">
+                                <li>点击卡片 → 定位到 YAML 对应位置</li>
+                                <li>双击卡片 → 打开 Beat 编辑器</li>
+                                <li>拖拽卡片 → 调整 Beat 顺序（自动更新 YAML）</li>
+                                <li>点击场景标题 → 折叠/展开该场景</li>
+                            </ul>
+                        </div>
                     </div>
                 </template>
 

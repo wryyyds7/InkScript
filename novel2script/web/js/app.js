@@ -81,6 +81,12 @@ function app() {
         selectedCharacter: null,  // 当前选中的角色
         characterRadarChart: null,  // 雷达图 Chart.js 实例
 
+        // ── Beat 可视化编辑（节拍板）────────
+        viewMode: 'yaml',        // 视图模式：'yaml' | 'beat-board'
+        beatBoardScenes: [],    // 节拍板数据（按场景分组）
+        beatBoardBeats: [],     // 节拍板所有 Beat 列表
+        beatBoardVisible: false, // 节拍板是否可见
+
         // 回收站
         showTrash: false,        // 是否显示回收站
         trashItems: [],          // 回收站项目列表
@@ -1648,6 +1654,53 @@ function app() {
                 }
             } catch (e) {
                 console.error('解析角色列表失败:', e);
+            }
+        },
+
+        // ── Beat 可视化编辑（节拍板）─────────
+
+        /** 切换视图模式（YAML / 节拍板） */
+        toggleViewMode() {
+            this.viewMode = this.viewMode === 'yaml' ? 'beat-board' : 'yaml';
+            
+            if (this.viewMode === 'beat-board' && this.activeProject) {
+                // 切换到节拍板视图，初始化
+                this.initBeatBoard();
+            } else {
+                // 切换回 YAML 视图
+                this.beatBoardVisible = false;
+            }
+        },
+
+        /** 初始化节拍板 */
+        async initBeatBoard() {
+            if (!this.activeProject || !this.scriptEditor) {
+                this.showToast('请先打开项目并加载剧本');
+                this.viewMode = 'yaml';
+                return;
+            }
+
+            try {
+                // 调用 beat-board.js 中的初始化函数
+                if (window.initBeatBoard) {
+                    window.initBeatBoard(this);
+                    this.beatBoardVisible = true;
+                } else {
+                    console.error('beat-board.js 未加载');
+                    this.showToast('节拍板模块加载失败');
+                    this.viewMode = 'yaml';
+                }
+            } catch (e) {
+                console.error('初始化节拍板失败:', e);
+                this.showToast('初始化节拍板失败');
+                this.viewMode = 'yaml';
+            }
+        },
+
+        /** 刷新节拍板（YAML 变化后调用） */
+        refreshBeatBoard() {
+            if (this.viewMode === 'beat-board' && window.refreshBeatBoard) {
+                window.refreshBeatBoard(this);
             }
         },
 
