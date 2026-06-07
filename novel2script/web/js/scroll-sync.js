@@ -196,6 +196,8 @@ export function parseBeatsFromYaml(yamlText) {
         if (currentBeat) {
             if (trimmed.startsWith("character:") || trimmed.startsWith("character_id:")) {
                 currentBeat.character = trimmed.split(":")[1]?.trim().replace(/['"]/g, "") || "";
+            } else if (trimmed.startsWith("emotion:")) {
+                currentBeat.emotion = trimmed.split(":")[1]?.trim().replace(/['"]/g, "") || "";
             } else if (trimmed.startsWith("text:") || trimmed.startsWith("content:")) {
                 let content = trimmed.split(":").slice(1).join(":").trim();
                 // 处理多行内容（以 | 或 > 开头的块）

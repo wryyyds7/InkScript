@@ -1928,34 +1928,37 @@ function app() {
             if (!this.scriptYaml) return;
             
             try {
-                // 简单解析：提取所有 dialogue beat 的 character 字段
-                const lines = this.scriptYaml.split('\n');
+                // 用 parseBeatsFromYaml 解析所有 Beat，提取角色和情绪
+                const { parseBeatsFromYaml } = await import('/js/scroll-sync.js');
+                const beats = parseBeatsFromYaml(this.scriptYaml);
                 const characterMap = {};
                 
-                let currentCharacter = null;
-                for (const line of lines) {
-                    const charMatch = line.match(/^\s+character:\s*(.+)$/);
-                    if (charMatch) {
-                        currentCharacter = charMatch[1].trim();
-                        if (!characterMap[currentCharacter]) {
-                            characterMap[currentCharacter] = {
-                                name: currentCharacter,
-                                dialogue_count: 0,
-                                emotion_distribution: {
-                                    happy: 0.2,
-                                    sad: 0.1,
-                                    angry: 0.1,
-                                    calm: 0.3,
-                                    excited: 0.2,
-                                    fear: 0.1
-                                }
-                            };
-                        }
+                for (const beat of beats) {
+                    const char = beat.character;
+                    if (!char) continue;
+                    if (!characterMap[char]) {
+                        characterMap[char] = {
+                            name: char,
+                            dialogue_count: 0,
+                            emotion_distribution: {
+                                happy: 0, sad: 0, angry: 0, calm: 0, excited: 0, fear: 0
+                            }
+                        };
                     }
-                    
-                    const typeMatch = line.match(/^\s+type:\s*dialogue$/);
-                    if (typeMatch && currentCharacter) {
-                        characterMap[currentCharacter].dialogue_count++;
+                    characterMap[char].dialogue_count++;
+                    const emotion = beat.emotion;
+                    if (emotion && characterMap[char].emotion_distribution.hasOwnProperty(emotion)) {
+                        characterMap[char].emotion_distribution[emotion]++;
+                    }
+                }
+                
+                // 归一化情绪分布
+                for (const char of Object.values(characterMap)) {
+                    const total = Object.values(char.emotion_distribution).reduce((a, b) => a + b, 0);
+                    if (total > 0) {
+                        for (const k of Object.keys(char.emotion_distribution)) {
+                            char.emotion_distribution[k] = parseFloat((char.emotion_distribution[k] / total).toFixed(2));
+                        }
                     }
                 }
                 
