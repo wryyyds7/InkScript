@@ -101,9 +101,12 @@ class OpenAIClient:
         schema: dict,
         temperature: float | None = None,
         max_tokens: int | None = None,
-    ) -> dict:
+    ) -> dict | list:
         """调用 LLM 并要求返回符合 JSON Schema 的 JSON 字符串"""
         import json
+
+        # 判断期望的是数组还是对象
+        is_array = schema.get("type") == "array"
 
         # 构造 system prompt 注入 JSON Schema 约束
         schema_str = json.dumps(schema, ensure_ascii=False)
@@ -123,16 +126,20 @@ class OpenAIClient:
 
         raw = self.chat(
             constrained_messages,
-            response_format={"type": "json_object"},
+            # 数组类型不传 response_format（某些 LLM 不支持 json_object 返回数组）
+            response_format={"type": "json_object"} if not is_array else None,
             temperature=temperature,
             max_tokens=max_tokens,
         )
 
         # 尝试提取 JSON(防止 LLM 返回 markdown 代码块)
         text = raw.strip()
+        print(f"[LLM] 原始响应: {text[:200]}")
         if text.startswith("```"):
             text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
-        return json.loads(text)
+        result = json.loads(text)
+        print(f"[LLM] JSON 解析成功, 类型: {type(result).__name__}")
+        return result
 
 
 def get_llm_client() -> OpenAIClient:
