@@ -579,7 +579,7 @@ def update_edit_meta(
 @router.post("/{project_id}/import-file")
 async def import_file(
     project_id: str,
-    file: UploadFile,
+    file: UploadFile = File(...),
     store: FileSystemProjectStore = Depends(get_store),
 ):
     """
