@@ -107,6 +107,7 @@ class DialogueParserStep:
                 scene_location=scene.location or "未知",
                 text_with_paragraph_numbers=text_with_numbers,
             )
+            print(f"[dialogue_parser] prompt 长度: {len(prompt)} 字符")
 
             raw = llm.chat_json(
                 messages=[
