@@ -575,23 +575,20 @@ function app() {
         },
 
         async deleteProject(id) {
-            // 使用自定义确认对话框替换 confirm()
-            const confirmed = await this.showConfirmDialog(
-                '删除项目',
-                '确认删除该项目？项目将进入回收站。'
-            );
-            
+            // 使用浏览器原生 confirm() 进行确认
+            const confirmed = confirm('确认删除该项目？项目将进入回收站。');
             if (!confirmed) return;
-            
+
             try {
-                await this.apiCall(`/api/v1/projects/${id}`, { 
-                    method: 'DELETE' 
+                await this.apiCall(`/api/v1/projects/${id}`, {
+                    method: 'DELETE'
                 }, '删除项目失败');
-                
+
                 await this.loadProjects();
                 this.showToast('✅ 项目已移动到回收站');
             } catch (error) {
                 // 错误已经在 apiCall() 中处理了
+                console.error('删除项目失败:', error);
             }
         },
 
