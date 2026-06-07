@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from novel2script.core.project_store import FileSystemProjectStore
 from novel2script.config import get_config
+from novel2script.schema import Script, DialogueBeat
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -395,6 +396,114 @@ def clear_operations(
     store.save_edit_meta(project_id, edit_meta)
     
     return {"code": 0, "message": "操作日志已清空"}
+
+
+# ── 角色情绪分布 API ─────────────────────────────
+# 动态从剧本 YAML 中解析角色列表和情绪分布（不写死数据）
+EMOTION_MAPPING = {
+    "高兴": "happy",
+    "开心": "happy",
+    "快乐": "happy",
+    "悲伤": "sad",
+    "伤心": "sad",
+    "愤怒": "angry",
+    "生气": "angry",
+    "平静": "calm",
+    "冷静": "calm",
+    "兴奋": "excited",
+    "激动": "excited",
+    "恐惧": "fear",
+    "害怕": "fear",
+}
+
+DEFAULT_EMOTION_DIST = {
+    "happy": 0.2,
+    "sad": 0.1,
+    "angry": 0.1,
+    "calm": 0.3,
+    "excited": 0.2,
+    "fear": 0.1,
+}
+
+
+@router.get("/{project_id}/characters")
+def list_characters(
+    project_id: str,
+    store: FileSystemProjectStore = Depends(get_store),
+):
+    """
+    获取项目的角色列表（含情绪分布）
+    
+    动态从剧本 YAML 中解析角色和情绪分布，不写死数据。
+    逻辑：
+    1. 如果剧本中已有角色列表，且情绪分布不为空，则直接返回
+    2. 否则，遍历所有场景、所有 Beat，动态计算角色和情绪分布
+    """
+    # 检查项目是否存在
+    if not store.get_project(project_id):
+        raise HTTPException(status_code=404, detail="项目不存在")
+    
+    # 加载剧本
+    script = store.load_script(project_id)
+    if not script:
+        return {"code": 0, "data": []}
+    
+    # 如果剧本中已有角色列表，且情绪分布不为空，则直接返回
+    if script.characters:
+        all_have_emotion_dist = all(
+            char.emotion_distribution for char in script.characters
+        )
+        if all_have_emotion_dist:
+            return {
+                "code": 0,
+                "data": [char.model_dump() for char in script.characters]
+            }
+    
+    # 动态计算角色列表和情绪分布
+    # 1. 收集所有 DialogueBeat，按 character 分组
+    character_beats = {}
+    for scene in script.scenes:
+        for beat in scene.beats:
+            if isinstance(beat, DialogueBeat):
+                char_name = beat.character
+                if char_name not in character_beats:
+                    character_beats[char_name] = []
+                character_beats[char_name].append(beat)
+    
+    # 2. 为每个角色计算情绪分布
+    characters = []
+    for char_name, beats in character_beats.items():
+        # 统计情绪频率
+        emotion_counts = {}
+        for beat in beats:
+            emotion = beat.emotion
+            if emotion:
+                # 映射到英文键
+                emotion_key = EMOTION_MAPPING.get(emotion, emotion)
+                # 确保是有效的情绪键
+                if emotion_key not in DEFAULT_EMOTION_DIST:
+                    # 如果不在默认键中，则跳过或添加到分布中
+                    # 这里选择添加到分布中（保持灵活性）
+                    pass
+                emotion_counts[emotion_key] = emotion_counts.get(emotion_key, 0) + 1
+        
+        # 归一化为概率分布
+        total = sum(emotion_counts.values())
+        emotion_distribution = {}
+        if total > 0:
+            for key, count in emotion_counts.items():
+                emotion_distribution[key] = round(count / total, 2)
+        else:
+            # 如果没有情绪数据，则使用默认值
+            emotion_distribution = DEFAULT_EMOTION_DIST.copy()
+        
+        characters.append({
+            "name": char_name,
+            "dialogue_count": len(beats),
+            "emotion_distribution": emotion_distribution,
+        })
+    
+    return {"code": 0, "data": characters}
 
 
 @router.post("/{project_id}/config-snapshot")
