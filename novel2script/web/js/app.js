@@ -2015,8 +2015,9 @@ function app() {
             const distribution = this.selectedCharacter.emotion_distribution || {};
             const data = emotions.map(e => distribution[e] || 0);
             
-            // 创建雷达图
-            this.characterRadarChart = new Chart(ctx, {
+            // 创建雷达图（try/catch 防止 Chart.js 初始化失败）
+            try {
+                this.characterRadarChart = new Chart(ctx, {
                 type: 'radar',
                 data: {
                     labels: emotions.map(e => emotionLabels[e]),
@@ -2059,6 +2060,9 @@ function app() {
                     }
                 }
             });
+            } catch (e) {
+                console.warn('雷达图初始化失败（非关键错误）:', e.message);
+            }
         },
 
         /** 定位到角色台词 */
