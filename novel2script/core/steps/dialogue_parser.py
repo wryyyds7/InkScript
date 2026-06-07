@@ -128,8 +128,10 @@ class DialogueParserStep:
                     },
                 },
             )
+            print(f"[dialogue_parser] LLM 返回 {len(raw)} 条对白: {raw}")
 
             for item in raw:
+                print(f"[dialogue_parser] 处理 item: {item}, type={type(item).__name__}")
                 # 构造 source_location
                 source_loc = None
                 start = item.get("source_start")
