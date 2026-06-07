@@ -1282,15 +1282,28 @@ function app() {
             const url = `/api/v1/convert/${taskId}/sse`;
             this.eventSource = new EventSource(url);
 
+            // 步骤名称中文化
+            const stepNames = {
+                'text_splitter': '文本分段',
+                'character_extractor': '识别角色',
+                'scene_splitter': '分割场景',
+                'dialogue_parser': '解析对白与动作',
+                'emotion_tagger': '标注情绪',
+                'yaml_generator': '生成剧本',
+                'init': '初始化',
+                'complete': '完成',
+                'error': '出错',
+            };
+
             this.eventSource.addEventListener('step_start', (e) => {
                 const d = JSON.parse(e.data);
-                this.currentStep = d.step;
+                this.currentStep = stepNames[d.step] || d.step;
             });
 
             this.eventSource.addEventListener('step_complete', (e) => {
                 const d = JSON.parse(e.data);
                 this.progress = d.percent;
-                this.currentStep = d.step;
+                this.currentStep = stepNames[d.step] || d.step;
             });
 
             this.eventSource.addEventListener('task_complete', () => {
