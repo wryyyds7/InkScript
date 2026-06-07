@@ -85,11 +85,16 @@ class DialogueParserStep:
         print(f"[dialogue_parser] characters: {characters}")
         char_str = "、".join(characters) if characters else "(暂无)"
 
+        if not characters and not script.characters:
+            print("[dialogue_parser] 无角色，跳过对白解析")
+            return script
+
         # 预分段，用于计算全局段落索引
         all_paragraphs = re.split(r"\n{2,}", novel_text)
         all_paragraphs = [p for p in all_paragraphs if p.strip()]
 
         for scene in script.scenes:
+            print(f"[dialogue_parser] 处理场景: id={scene.scene_id}, title={scene.title}, location={scene.location}")
             # 取该场景对应的原文片段（简化：用场景标题在原文中定位）
             # V1 简化策略：直接把全文当作每个场景的输入
             text = novel_text[:3000]  # 防止超 Token
