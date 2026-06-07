@@ -28,11 +28,23 @@ def script_to_txt(script: Script) -> str:
     lines.append("=" * 40)
     lines.append("")
 
+    # 统计信息
+    meta = script.meta
+    lines.append("【统计信息】")
+    lines.append(f"  总节拍数: {meta.total_beats}")
+    lines.append(f"  对白数: {meta.dialogue_count}")
+    lines.append(f"  动作数: {meta.action_count}")
+    lines.append(f"  旁白数: {meta.narration_count}")
+    lines.append(f"  角色数: {len(meta.characters)}")
+    lines.append("")
+
     if script.characters:
         lines.append("【角色列表】")
         for c in script.characters:
             aliases_str = f"（别名：{'、'.join(c.aliases)}）" if c.aliases else ""
             lines.append(f"  - {c.name}{aliases_str}")
+            if c.description:
+                lines.append(f"    {c.description}")
         lines.append("")
 
     for scene in script.scenes:
