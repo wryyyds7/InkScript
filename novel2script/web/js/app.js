@@ -918,10 +918,25 @@ function app() {
             // 动态导入 editor.js（因为是 type="importmap" 模块）
             const { initNovelEditor, initScriptEditor, getContent, setContent } = await import('/js/editor.js');
 
-            const novelContainer = document.getElementById('novel-editor-container');
-            const scriptContainer = document.getElementById('script-editor-container');
-
-            if (!novelContainer || !scriptContainer) return;
+            // 等待编辑器容器出现（Alpine 可能需要多个 tick 才能完全渲染）
+            let novelContainer = document.getElementById('novel-editor-container');
+            let scriptContainer = document.getElementById('script-editor-container');
+            
+            // 重试最多 10 次，每次等待一个 tick
+            let retries = 0;
+            while ((!novelContainer || !scriptContainer) && retries < 10) {
+                await new Promise(resolve => setTimeout(resolve, 50)); // 等待 50ms
+                await this.$nextTick();
+                novelContainer = document.getElementById('novel-editor-container');
+                scriptContainer = document.getElementById('script-editor-container');
+                retries++;
+            }
+            
+            if (!novelContainer || !scriptContainer) {
+                console.error('编辑器容器未找到，无法初始化编辑器');
+                this.showToast('⚠️ 编辑器初始化失败，请重试');
+                return;
+            }
 
             // 如果已初始化，先销毁
             if (this.novelEditor) this.novelEditor.destroy();
