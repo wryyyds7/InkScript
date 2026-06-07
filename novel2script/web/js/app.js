@@ -367,9 +367,9 @@ function app() {
                 if (isCtrlOrCmd && e.key === 's') {
                     e.preventDefault();
                     if (this.activeProject) {
-                        this.saveNovel();
-                        this.saveScript();
-                        this.showToast('已保存（Ctrl+S）');
+                        // 手动保存时显示提示
+                        this.saveNovel(true);
+                        this.saveScript(true);
                     }
                 }
                 
@@ -528,15 +528,36 @@ function app() {
                 // 等待 DOM 更新后再初始化编辑器
                 await this.$nextTick();
                 
-                await this.loadNovel();
-                await this.loadScript();
+                // 分步加载，每一步都单独处理错误
+                try {
+                    await this.loadNovel();
+                } catch (e) {
+                    console.error('加载小说失败:', e);
+                    this.showToast('⚠️ 加载小说失败，将使用空内容');
+                }
+                
+                try {
+                    await this.loadScript();
+                } catch (e) {
+                    console.error('加载剧本失败:', e);
+                    // 剧本可能不存在，这是正常的
+                }
+                
                 // 加载编辑器元数据（恢复滚动位置、面板状态等）
-                await this.loadEditMeta();
+                try {
+                    await this.loadEditMeta();
+                } catch (e) {
+                    console.error('加载编辑器元数据失败:', e);
+                }
+                
                 // 初始化 CodeMirror 编辑器
                 await this.initEditors();
+                
+                this.showToast(`已打开项目：${this.activeProject.name}`);
             } catch (error) {
                 // 错误已经在 apiCall() 中处理了，这里可以额外处理一些UI状态
                 this.view = 'projects'; // 确保在项目列表页
+                console.error('打开项目失败:', error);
             }
         },
 
@@ -1153,7 +1174,7 @@ function app() {
             }
         },
 
-        async saveNovel() {
+        async saveNovel(showNotice = false) {
             if (!this.activeProject) return;
             const content = this.novelEditor
                 ? (await import('/js/editor.js')).getContent(this.novelEditor)
@@ -1163,7 +1184,10 @@ function app() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ content }),
             });
-            this.showToast('小说已保存');
+            // 只在手动保存时显示提示
+            if (showNotice) {
+                this.showToast('小说已保存');
+            }
             // 保存编辑器元数据
             await this.saveEditMeta();
         },
@@ -1266,7 +1290,7 @@ function app() {
             }
         },
 
-        async saveScript() {
+        async saveScript(showNotice = false) {
             if (!this.activeProject) return;
             const yaml = this.scriptEditor
                 ? (await import('/js/editor.js')).getContent(this.scriptEditor)
@@ -1276,7 +1300,10 @@ function app() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ yaml }),
             });
-            this.showToast('剧本已保存');
+            // 只在手动保存时显示提示
+            if (showNotice) {
+                this.showToast('剧本已保存');
+            }
             // 保存编辑器元数据
             await this.saveEditMeta();
         },
@@ -2263,9 +2290,9 @@ function app() {
             // 让用户命名文件（可选）
             const customName = prompt('请输入文件名（留空使用项目名称）:', this.activeProject.name || 'novel');
             if (customName === null) return; // 用户取消
-
-            // 调用原有保存逻辑
-            await this.saveNovel();
+            
+            // 调用原有保存逻辑（带提示）
+            await this.saveNovel(true);
             
             // 显示保存位置
             this.showSaveLocation('novel');
@@ -2281,9 +2308,9 @@ function app() {
             // 让用户命名文件（可选）
             const customName = prompt('请输入文件名（留空使用项目名称）:', this.activeProject.name || 'script');
             if (customName === null) return; // 用户取消
-
-            // 调用原有保存逻辑
-            await this.saveScript();
+            
+            // 调用原有保存逻辑（带提示）
+            await this.saveScript(true);
             
             // 显示保存位置
             this.showSaveLocation('script');
