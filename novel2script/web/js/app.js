@@ -1924,7 +1924,7 @@ function app() {
         },
 
         /** 从剧本YAML中解析角色列表 */
-        parseCharactersFromScript() {
+        async parseCharactersFromScript() {
             if (!this.scriptYaml) return;
             
             try {
