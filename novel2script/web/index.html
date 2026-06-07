@@ -200,7 +200,14 @@
                     <h3 class="text-lg font-semibold text-gray-900 mb-4">最近项目</h3>
                     <div class="space-y-3">
                         <template x-for="p in projects.slice(0, 5)" :key="p.id">
-                            <div @click="openProject(p.id)" class="project-card flex items-center justify-between" tabindex="0" role="button" :aria-label="'打开项目 ' + p.name">
+                            <div 
+                                @click="openProject(p.id)" 
+                                @keydown.enter="openProject(p.id)"
+                                @keydown.space.prevent="openProject(p.id)"
+                                class="project-card flex items-center justify-between" 
+                                tabindex="0" 
+                                role="button" 
+                                :aria-label="'打开项目 ' + p.name">
                                 <div class="flex items-center gap-3">
                                     <div class="w-12 h-12 bg-gradient-to-br from-indigo-400 to-indigo-600 rounded-xl flex items-center justify-center shadow-md">
                                         <span class="text-sm font-bold text-white" x-text="p.name.charAt(0).toUpperCase()"></span>
@@ -309,7 +316,15 @@
                         </button>
                     </div>
                 </div>
-                <div class="grid gap-4">
+                
+                <!-- Loading 状态 -->
+                <div x-show="loadingProjects" class="text-center py-12">
+                    <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                    <p class="mt-4 text-gray-600">加载中...</p>
+                </div>
+                
+                <!-- 项目列表 -->
+                <div class="grid gap-4" x-show="!loadingProjects">
                     <template x-for="p in projects" :key="p.id">
                         <div class="project-card flex items-center justify-between">
                             <div class="flex items-center gap-4">
@@ -408,6 +423,49 @@
         </template>
 
         <!-- Skill 管理页面（已在第 791 行定义，此处删除重复） -->
+
+        <!-- 通用输入对话框（替换 prompt()） -->
+        <div x-show="showInputModal" x-cloak class="modal-overlay" @click.self="cancelInputModal()">
+            <div class="modal-content max-w-md">
+                <div class="modal-header">
+                    <h3 class="text-lg font-bold" x-text="inputModalTitle || '请输入'"></h3>
+                    <button @click="cancelInputModal()" class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-sm text-gray-600 mb-4" x-text="inputModalMessage || ''"></p>
+                    <input 
+                        type="text" 
+                        x-model="inputModalValue" 
+                        @keydown.enter="confirmInputModal()"
+                        @keydown.escape="cancelInputModal()"
+                        class="input w-full" 
+                        :placeholder="inputModalPlaceholder || '请输入...'"
+                        x-ref="inputModal"
+                        autofocus>
+                </div>
+                <div class="modal-footer">
+                    <button @click="cancelInputModal()" class="btn border px-4 py-2">取消</button>
+                    <button @click="confirmInputModal()" class="btn-primary px-4 py-2">确定</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 通用确认对话框（替换 confirm()） -->
+        <div x-show="showConfirmModal" x-cloak class="modal-overlay" @click.self="cancelConfirmModal()">
+            <div class="modal-content max-w-md">
+                <div class="modal-header">
+                    <h3 class="text-lg font-bold" x-text="confirmModalTitle || '确认'"></h3>
+                    <button @click="cancelConfirmModal()" class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-sm text-gray-600" x-text="confirmModalMessage || '确定要执行此操作吗？'"></p>
+                </div>
+                <div class="modal-footer">
+                    <button @click="cancelConfirmModal()" class="btn border px-4 py-2">取消</button>
+                    <button @click="confirmConfirmModal()" class="btn-primary px-4 py-2 bg-red-600 hover:bg-red-700">确定</button>
+                </div>
+            </div>
+        </div>
 
         <!-- 创建 Skill 模态框 -->
         <div x-show="showCreateSkillModal" x-cloak class="modal-overlay" @click.self="showCreateSkillModal = false">
@@ -618,6 +676,10 @@
                                 <button @click="exportTxt()" class="btn-nav-sm text-xs font-bold" title="导出 TXT">TXT</button>
                                 <button @click="exportFountain()" class="btn-nav-sm text-xs font-bold" title="导出 Fountain">FTN</button>
                                 <button @click="viewConfigSnapshot()" class="btn-nav-sm text-xs" title="查看项目配置快照">⚙ 配置</button>
+                                <!-- Skills 按钮 -->
+                                <button @click="view='skills'" class="btn-nav-sm text-xs font-bold text-purple-600 hover:bg-purple-50" title="Skills 管理">
+                                    🔧 Skills
+                                </button>
                             </div>
                         </div>
                         <div id="script-editor-container" class="flex-1"></div>

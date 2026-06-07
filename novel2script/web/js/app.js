@@ -37,12 +37,34 @@ function app() {
         novelEditor: null,          // EditorView 实例（小说）
         scriptEditor: null,        // EditorView 实例（剧本）
 
+        // Loading 状态
+        loadingProjects: false,    // 项目列表加载中
+        loadingNovel: false,       // 小说内容加载中
+        loadingScript: false,      // 剧本内容加载中
+        savingNovel: false,        // 保存小说中
+        savingScript: false,       // 保存剧本中
+
         // 自动保存计时器
         _novelSaveTimer: null,
         _scriptSaveTimer: null,
 
         // 快捷键帮助 Modal 显示状态
         showShortcutsModal: false,
+
+        // 通用输入对话框状态（替换 prompt()）
+        showInputModal: false,
+        inputModalTitle: '',
+        inputModalMessage: '',
+        inputModalPlaceholder: '',
+        inputModalValue: '',
+        inputModalResolve: null,
+        inputModalReject: null,
+
+        // 通用确认对话框状态（替换 confirm()）
+        showConfirmModal: false,
+        confirmModalTitle: '',
+        confirmModalMessage: '',
+        confirmModalResolve: null,
 
         // 项目搜索和排序
         projectSearch: '',       // 项目搜索关键词
@@ -165,6 +187,151 @@ function app() {
             this._loadGuideState();  // 初始化使用指南状态
             this._initKeyboardShortcuts();
             this._initOperationLogListener();  // 初始化操作日志监听
+            this._initAutoSave();  // 初始化自动保存
+        },
+
+        // ── 自动保存功能 ────────────────────
+        _initAutoSave() {
+            // 监听页面卸载事件，自动保存
+            window.addEventListener('beforeunload', (e) => {
+                if (this.activeProject) {
+                    // 同步保存（最佳实践是在 beforeunload 中使用同步请求）
+                    // 但由于我们的 API 是异步的，这里使用一个标志来提示用户
+                    const novelContent = this.novelEditor ? getContent(this.novelEditor) : this.novelText;
+                    const scriptContent = this.scriptEditor ? getContent(this.scriptEditor) : this.scriptYaml;
+                    
+                    // 如果内容有变化，提示用户
+                    if (novelContent !== this.novelText || scriptContent !== this.scriptYaml) {
+                        // 尝试异步保存（大多数现代浏览器会等待一小段时间）
+                        this.saveNovel();
+                        this.saveScript();
+                        
+                        // 标准方式：提示用户
+                        e.preventDefault();
+                        e.returnValue = '检测到未保存的更改，确定要离开吗？';
+                    }
+                }
+            });
+
+            // 监听视图切换，自动保存
+            this.$watch('view', (newView, oldView) => {
+                if (oldView === 'editor' && this.activeProject) {
+                    // 离开编辑器时自动保存
+                    this.saveNovel();
+                    this.saveScript();
+                }
+            });
+        },
+
+        // ── 通用 API 调用包装器（带错误处理）────────────────────
+        /**
+         * 通用的 fetch 包装器，自动处理错误和用户反馈
+         * @param {string} url - API 地址
+         * @param {object} options - fetch 选项
+         * @param {string} errorMessage - 自定义错误信息
+         * @returns {Promise<object>} - 解析后的响应数据
+         */
+        async apiCall(url, options = {}, errorMessage = '操作失败') {
+            try {
+                const res = await fetch(url, options);
+                
+                // 检查 HTTP 状态
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                }
+                
+                const data = await res.json();
+                
+                // 检查业务状态码
+                if (data.code !== 0) {
+                    throw new Error(data.message || errorMessage);
+                }
+                
+                return data;
+            } catch (error) {
+                // 显示错误提示
+                const errorMsg = error.message || errorMessage;
+                this.showToast(`❌ ${errorMsg}`, 'error');
+                console.error('[API Call Error]', { url, options, error });
+                
+                // 重新抛出错误，让调用者可以处理
+                throw error;
+            }
+        },
+
+        // ── 通用对话框方法（替换 prompt()/confirm()）────────────────────
+        
+        /**
+         * 显示输入对话框（替换 prompt()）
+         * @param {string} title - 对话框标题
+         * @param {string} message - 提示信息
+         * @param {string} placeholder - 输入框占位符
+         * @param {string} defaultValue - 默认值
+         * @returns {Promise<string|null>} - 用户输入的值，或 null（取消）
+         */
+        showInputDialog(title, message = '', placeholder = '', defaultValue = '') {
+            return new Promise((resolve) => {
+                this.inputModalTitle = title;
+                this.inputModalMessage = message;
+                this.inputModalPlaceholder = placeholder;
+                this.inputModalValue = defaultValue;
+                this.inputModalResolve = resolve;
+                this.showInputModal = true;
+                
+                // 自动聚焦到输入框
+                this.$nextTick(() => {
+                    if (this.$refs.inputModal) {
+                        this.$refs.inputModal.focus();
+                    }
+                });
+            });
+        },
+
+        confirmInputModal() {
+            if (this.inputModalResolve) {
+                this.inputModalResolve(this.inputModalValue);
+                this.inputModalResolve = null;
+            }
+            this.showInputModal = false;
+        },
+
+        cancelInputModal() {
+            if (this.inputModalResolve) {
+                this.inputModalResolve(null);
+                this.inputModalResolve = null;
+            }
+            this.showInputModal = false;
+        },
+
+        /**
+         * 显示确认对话框（替换 confirm()）
+         * @param {string} title - 对话框标题
+         * @param {string} message - 确认信息
+         * @returns {Promise<boolean>} - 用户是否确认
+         */
+        showConfirmDialog(title, message = '确定要执行此操作吗？') {
+            return new Promise((resolve) => {
+                this.confirmModalTitle = title;
+                this.confirmModalMessage = message;
+                this.confirmModalResolve = resolve;
+                this.showConfirmModal = true;
+            });
+        },
+
+        confirmConfirmModal() {
+            if (this.confirmModalResolve) {
+                this.confirmModalResolve(true);
+                this.confirmModalResolve = null;
+            }
+            this.showConfirmModal = false;
+        },
+
+        cancelConfirmModal() {
+            if (this.confirmModalResolve) {
+                this.confirmModalResolve(false);
+                this.confirmModalResolve = null;
+            }
+            this.showConfirmModal = false;
         },
 
         // ── 操作日志事件监听 ────────────────────
@@ -282,16 +449,23 @@ function app() {
 
         // ── 项目管理 ─────────────────────
         async loadProjects() {
+            this.loadingProjects = true;
+            
             const params = new URLSearchParams();
             if (this.projectSearch) params.append('search', this.projectSearch);
             if (this.projectSortBy) params.append('sort_by', this.projectSortBy);
             if (this.projectSortOrder) params.append('order', this.projectSortOrder);
             
             const url = `/api/v1/projects${params.toString() ? '?' + params.toString() : ''}`;
-            const res = await fetch(url);
-            const data = await res.json();
-            if (data.code === 0) {
+            
+            try {
+                const data = await this.apiCall(url, {}, '加载项目列表失败');
                 this.projects = data.data;
+            } catch (error) {
+                // apiCall 已经显示了错误提示，这里只需要处理特定的回滚逻辑（如果有）
+                this.projects = [];
+            } finally {
+                this.loadingProjects = false;
             }
         },
 
@@ -313,39 +487,73 @@ function app() {
         },
 
         async createProject() {
-            const name = prompt('请输入项目名称：');
-            if (!name) return;
-            const res = await fetch('/api/v1/projects', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name }),
-            });
-            const data = await res.json();
-            if (data.code === 0) {
+            // 使用自定义输入对话框替换 prompt()
+            const name = await this.showInputDialog(
+                '创建项目',
+                '请输入项目名称：',
+                '项目名称',
+                ''
+            );
+            
+            if (!name || !name.trim()) return;
+            
+            try {
+                const data = await this.apiCall('/api/v1/projects', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name.trim() }),
+                }, '创建项目失败');
+                
                 await this.loadProjects();
                 this.view = 'projects';
+                this.showToast('✅ 项目创建成功');
+            } catch (error) {
+                // 错误已经在 apiCall() 中处理了
             }
         },
 
         async openProject(id) {
-            const res = await fetch(`/api/v1/projects/${id}`);
-            const data = await res.json();
-            if (data.code === 0) {
+            try {
+                const data = await this.apiCall(`/api/v1/projects/${id}`, {}, '打开项目失败');
+                
                 this.previousView = this.view;
                 this.activeProject = data.data;
                 this.view = 'editor';
+                
+                // 等待 DOM 更新后再初始化编辑器
+                await this.$nextTick();
+                
                 await this.loadNovel();
                 await this.loadScript();
                 // 加载编辑器元数据（恢复滚动位置、面板状态等）
                 await this.loadEditMeta();
+                // 初始化 CodeMirror 编辑器
+                await this.initEditors();
+            } catch (error) {
+                // 错误已经在 apiCall() 中处理了，这里可以额外处理一些UI状态
+                this.view = 'projects'; // 确保在项目列表页
             }
         },
 
         async deleteProject(id) {
-            if (!confirm('确认删除该项目？项目将进入回收站。')) return;
-            await fetch(`/api/v1/projects/${id}`, { method: 'DELETE' });
-            await this.loadProjects();
-            this.showToast('项目已移动到回收站');
+            // 使用自定义确认对话框替换 confirm()
+            const confirmed = await this.showConfirmDialog(
+                '删除项目',
+                '确认删除该项目？项目将进入回收站。'
+            );
+            
+            if (!confirmed) return;
+            
+            try {
+                await this.apiCall(`/api/v1/projects/${id}`, { 
+                    method: 'DELETE' 
+                }, '删除项目失败');
+                
+                await this.loadProjects();
+                this.showToast('✅ 项目已移动到回收站');
+            } catch (error) {
+                // 错误已经在 apiCall() 中处理了
+            }
         },
 
         // ── 回收站管理 ─────────────────────
@@ -369,41 +577,43 @@ function app() {
         },
 
         async restoreProject(projectId) {
-            if (!confirm('确认恢复该项目？')) return;
+            const confirmed = await this.showConfirmDialog(
+                '恢复项目',
+                '确认恢复该项目？'
+            );
+            
+            if (!confirmed) return;
             
             try {
-                const res = await fetch(`/api/v1/trash/${projectId}/restore`, {
+                await this.apiCall(`/api/v1/trash/${projectId}/restore`, {
                     method: 'POST'
-                });
-                const data = await res.json();
-                if (data.code === 0) {
-                    this.showToast('项目已恢复');
-                    await this.loadTrash();
-                    await this.loadProjects();
-                } else {
-                    alert('恢复失败: ' + data.message);
-                }
-            } catch (e) {
-                alert('恢复失败: ' + e.message);
+                }, '恢复项目失败');
+                
+                this.showToast('✅ 项目已恢复');
+                await this.loadTrash();
+                await this.loadProjects();
+            } catch (error) {
+                // 错误已经在 apiCall() 中处理了
             }
         },
 
         async permanentDelete(projectId) {
-            if (!confirm('确认永久删除该项目？删除后不可恢复。')) return;
+            const confirmed = await this.showConfirmDialog(
+                '永久删除',
+                '确认永久删除该项目？删除后不可恢复。'
+            );
+            
+            if (!confirmed) return;
             
             try {
-                const res = await fetch(`/api/v1/trash/${projectId}`, {
+                await this.apiCall(`/api/v1/trash/${projectId}`, {
                     method: 'DELETE'
-                });
-                const data = await res.json();
-                if (data.code === 0) {
-                    this.showToast('项目已永久删除');
-                    await this.loadTrash();
-                } else {
-                    alert('删除失败: ' + data.message);
-                }
-            } catch (e) {
-                alert('删除失败: ' + e.message);
+                }, '永久删除项目失败');
+                
+                this.showToast('✅ 项目已永久删除');
+                await this.loadTrash();
+            } catch (error) {
+                // 错误已经在 apiCall() 中处理了
             }
         },
 
