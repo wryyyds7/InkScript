@@ -1942,8 +1942,9 @@ function app() {
             if (!this.selectedCharacter) return;
             
             const canvas = document.getElementById('characterRadarChart');
-            if (!canvas) {
-                console.error('找不到雷达图 canvas 元素');
+            if (!canvas || canvas.offsetWidth === 0 || canvas.offsetHeight === 0) {
+                console.warn('雷达图 canvas 未就绪，稍后重试');
+                setTimeout(() => this.initCharacterRadarChart(), 200);
                 return;
             }
             
