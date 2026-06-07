@@ -134,7 +134,10 @@ async def _run_pipeline(task_id: str, project_id: str, store: FileSystemProjectS
         from novel2script.llm_client import OpenAIClient
         from novel2script.config import get_config
         cfg = get_config()
+        # 优先使用解密后的 API Key，失败则用明文
         api_key = cfg.get_decrypted_api_key()
+        if not api_key:
+            api_key = cfg.llm_api_key  # 回退到明文（前端保存的）
         print(f"[转换] LLM 配置: base_url={cfg.llm_base_url}, model={cfg.llm_model_name}, api_key={'***' if api_key else '(空)'}")
         llm = OpenAIClient(
             base_url=cfg.llm_base_url,
