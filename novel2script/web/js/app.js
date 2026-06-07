@@ -555,9 +555,10 @@ function app() {
                 
                 this.showToast(`已打开项目：${this.activeProject.name}`);
             } catch (error) {
-                // 错误已经在 apiCall() 中处理了，这里可以额外处理一些UI状态
-                this.view = 'projects'; // 确保在项目列表页
+                // ⚠️ 不再强制回退到项目列表，而是显示错误提示
                 console.error('打开项目失败:', error);
+                this.showToast(`⚠️ 打开项目失败：${error.message || '未知错误'}`);
+                // 不再设置 this.view = 'projects'，让用户留在当前页面查看错误
             }
         },
 
