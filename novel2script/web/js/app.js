@@ -1219,7 +1219,6 @@ function app() {
                     this.runEnabledSkills();
                 }
             });
-            });
 
             this.eventSource.addEventListener('warning', (e) => {
                 const d = JSON.parse(e.data);
