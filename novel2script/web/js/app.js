@@ -1306,17 +1306,16 @@ function app() {
                 this.currentStep = stepNames[d.step] || d.step;
             });
 
-            this.eventSource.addEventListener('task_complete', () => {
+            this.eventSource.addEventListener('task_complete', async () => {
                 this.converting = false;
                 this.progress = 100;
                 this.currentStep = '完成';
                 this.eventSource.close();
-                this.loadScript();
-                // 延迟刷新角色和情绪数据
-                setTimeout(() => {
-                    this.parseCharactersFromScript();
-                    if (window.refreshBeatBoard) window.refreshBeatBoard(this);
-                }, 800);
+                // 加载最新剧本
+                await this.loadScript();
+                // 刷新角色、情绪和节拍板
+                this.parseCharactersFromScript();
+                if (window.refreshBeatBoard) window.refreshBeatBoard(this);
                 this.showToast('转换完成！');
             });
 
