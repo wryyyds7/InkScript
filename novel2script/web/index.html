@@ -8,22 +8,14 @@
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <!-- CodeMirror 主题 CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@codemirror/theme-one-dark@6.1.2/theme/one-dark.css" />
-    <!-- 使用 esm.run CDN（自动依赖去重） -->
+    <!-- 使用 jsdelivr.net ?bundle 模式（单一 bundle 确保依赖唯一） -->
     <script type="importmap">
     {
         "imports": {
-            "@codemirror/state": "https://esm.run/@codemirror/state@6.4.0",
-            "@codemirror/view": "https://esm.run/@codemirror/view@6.33.0",
-            "@codemirror/language": "https://esm.run/@codemirror/language@6.10.0",
-            "@codemirror/lint": "https://esm.run/@codemirror/lint@6.8.0",
-            "@codemirror/commands": "https://esm.run/@codemirror/commands@6.7.0",
-            "@codemirror/history": "https://esm.run/@codemirror/history@6.3.0",
-            "@codemirror/fold": "https://esm.run/@codemirror/fold@6.3.0",
-            "@codemirror/gutter": "https://esm.run/@codemirror/gutter@6.3.0",
-            "@codemirror/autocomplete": "https://esm.run/@codemirror/autocomplete@6.18.0",
-            "@codemirror/lang-yaml": "https://esm.run/@codemirror/lang-yaml@6.1.3",
-            "@codemirror/theme-one-dark": "https://esm.run/@codemirror/theme-one-dark@6.1.2",
-            "yaml": "https://esm.run/yaml@2.3.4"
+            "@codemirror/lang-yaml": "https://cdn.jsdelivr.net/npm/@codemirror/lang-yaml@6.1.3/+esm?bundle",
+            "@codemirror/theme-one-dark": "https://cdn.jsdelivr.net/npm/@codemirror/theme-one-dark@6.1.2/+esm?bundle",
+            "@codemirror/lint": "https://cdn.jsdelivr.net/npm/@codemirror/lint@6.8.0/+esm?bundle",
+            "yaml": "https://cdn.jsdelivr.net/npm/yaml@2.3.4/+esm?bundle"
         }
     }
     </script>
