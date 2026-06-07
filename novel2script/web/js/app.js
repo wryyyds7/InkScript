@@ -2285,7 +2285,7 @@ function app() {
             if (!this.activeProject) return;
             const content = this.novelEditor
                 ? (await import('/js/editor.js')).getContent(this.novelEditor)
-                : this.novelYaml;
+                : this.novelText;  // 修复：原来是 this.novelYaml（错误）
 
             // 让用户命名文件（可选）
             const customName = prompt('请输入文件名（留空使用项目名称）:', this.activeProject.name || 'novel');
