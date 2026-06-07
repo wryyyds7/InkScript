@@ -45,7 +45,7 @@ _USER_PROMPT_TPL = """## 角色列表
 4. 输出 JSON 数组,格式:
 ```json
 [
-  {"character": "李雷", "content": "你好", "emotion": "happy", "source_start": 3, "source_end": 3}
+  {{"character": "李雷", "content": "你好", "emotion": "happy", "source_start": 3, "source_end": 3}}
 ]
 ```
 """
