@@ -1,3 +1,17 @@
-通过网盘分享的文件：讲解视频.zip
-链接: https://pan.baidu.com/s/1nrcyVrfKZSM1n8EFGi5CLg?pwd=1234
-提取码: 1234
+InkScript 项目讲解视频
+======================
+
+视频分为两个部分：
+
+【讲解视频1】完整功能演示（共4段，按顺序观看）
+  讲解视频1_part1.mp4 (57.6MB) - 第1段
+  讲解视频1_part2.mp4 (66.6MB) - 第2段
+  讲解视频1_part3.mp4 (69.1MB) - 第3段
+  讲解视频1_part4.mp4 (66.2MB) - 第4段
+
+【讲解视频2】补充说明
+  讲解视频2.mp4 (29.5MB)
+
+百度网盘下载（含完整未拆分版）：
+  链接: https://pan.baidu.com/s/1nrcyVrfKZSM1n8EFGi5CLg?pwd=1234
+  提取码: 1234
